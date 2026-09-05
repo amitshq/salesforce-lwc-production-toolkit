@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Salesforce LWC Production Toolkit</title>
+<meta name="description" content="Reusable, production-grade Lightning Web Components and Apex services: a generic server-side datatable, a modal framework, error/state handling, and the utility functions every Salesforce project rebuilds from scratch." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%E2%9A%A1</text></svg>" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="#top">⚡ salesforce-lwc-production-toolkit</a>
+    <nav class="links">
+      <a href="#components">Components</a>
+      <a href="#flagship">Flagship</a>
+      <a href="#start">Getting started</a>
+      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Usage guide</a>
+      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero" id="top">
+    <div class="wrap">
+      <div class="badges">
+        <img src="https://img.shields.io/badge/API-61.0%2B-0b5cff" alt="API version 61.0+" />
+        <img src="https://img.shields.io/badge/tests-125%20passing-2ea043" alt="125 tests passing" />
+        <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT license" />
+      </div>
+      <h1>Stop rebuilding the same enterprise LWC components on every project.</h1>
+      <p class="lead">
+        A generic server-side datatable, a modal framework, error/state handling, and the debounce/deep-clone/permission-check
+        utilities every Salesforce project eventually writes from scratch &mdash; built once, tested, and documented.
+      </p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit">View on GitHub</a>
+        <a class="btn secondary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Read the usage guide</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="why">
+    <div class="wrap">
+      <h2>Why this exists</h2>
+      <p class="section-lead">
+        Every Salesforce project eventually builds some variation of a server-side, sortable, filterable, editable datatable
+        with bulk actions &mdash; and re-derives the same Apex error parsing, the same modal boilerplate, the same
+        loading/empty/error branch. This is not a <code>lightning-button</code> wrapper library: everything here either does
+        something non-trivial (server-side pagination with partial-error reporting) or removes genuine, repeated boilerplate.
+      </p>
+    </div>
+  </section>
+
+  <section id="flagship">
+    <div class="wrap">
+      <h2>The flagship: <code>c-enterprise-datatable</code></h2>
+      <p class="section-lead">Point it at an object and a column array. It handles the rest of this pipeline server-side:</p>
+      <div class="pipeline">
+        <span class="step">Server-side query</span><span class="arrow">&rarr;</span>
+        <span class="step">Pagination</span><span class="arrow">&rarr;</span>
+        <span class="step">Filtering</span><span class="arrow">&rarr;</span>
+        <span class="step">Sorting</span><span class="arrow">&rarr;</span>
+        <span class="step">Inline editing</span><span class="arrow">&rarr;</span>
+        <span class="step">Bulk update</span><span class="arrow">&rarr;</span>
+        <span class="step">Partial errors</span><span class="arrow">&rarr;</span>
+        <span class="step">Refresh</span>
+      </div>
+      <pre><code>&lt;c-enterprise-datatable
+    object-api-name="Account"
+    title="Accounts"
+    columns={columns}
+    page-size="25"
+    pagination-mode="pages"
+    search-fields={searchFields}
+    bulk-actions={bulkActions}
+    enable-row-selection
+    enable-bulk-delete
+    default-sort-field="Name"
+    onbulkaction={handleBulkAction}
+&gt;&lt;/c-enterprise-datatable&gt;</code></pre>
+      <p>
+        Backed by four generic Apex services &mdash; <code>GenericQueryService</code>, <code>GenericDmlService</code>,
+        <code>PermissionService</code>, <code>CustomMetadataService</code> &mdash; instead of a bespoke controller per object.
+        Identifiers (object/field names) are validated against the running user's schema describe; values are always bound
+        via <code>Database.queryWithBinds</code>, never concatenated. See the
+        <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md#enterprise-datatable">usage guide</a> for the full column/API reference.
+      </p>
+    </div>
+  </section>
+
+  <section id="components">
+    <div class="wrap">
+      <h2>What's inside</h2>
+      <p class="section-lead">Reusable pieces, usable independently of the datatable.</p>
+
+      <div class="cat-heading">Data components</div>
+      <div class="grid">
+        <div class="card"><h3>Enterprise Datatable</h3><p>The full server-side pipeline above.</p><code class="path">lwc/enterpriseDatatable</code></div>
+        <div class="card"><h3>Infinite Scroll Loader</h3><p>IntersectionObserver-based "load more" sentinel for any list.</p><code class="path">lwc/infiniteScrollLoader</code></div>
+        <div class="card"><h3>Bulk Action Bar</h3><p>"N selected" toolbar with your own action buttons.</p><code class="path">lwc/bulkActionBar</code></div>
+      </div>
+
+      <div class="cat-heading">UX components</div>
+      <div class="grid">
+        <div class="card"><h3>Modal</h3><p>Slot-based, focus-trapped modal framework. Works in Experience Cloud/LWR too.</p><code class="path">lwc/modal</code></div>
+        <div class="card"><h3>Confirm Dialog</h3><p>Promise-based confirmation dialog built on <code>lightning/modal</code>.</p><code class="path">lwc/confirmDialog</code></div>
+        <div class="card"><h3>State Manager</h3><p>One component for the loading/error/empty/content branch.</p><code class="path">lwc/stateManager</code></div>
+        <div class="card"><h3>Empty State</h3><p>Presentational "no data" placeholder with an actions slot.</p><code class="path">lwc/emptyState</code></div>
+        <div class="card"><h3>Error State</h3><p>Retry button + collapsible raw error details.</p><code class="path">lwc/errorState</code></div>
+        <div class="card"><h3>Wizard</h3><p>Multi-step flow with cancelable per-step validation.</p><code class="path">lwc/wizard</code></div>
+      </div>
+
+      <div class="cat-heading">Data utilities</div>
+      <div class="grid">
+        <div class="card"><h3>functionUtils</h3><p>Debounce and throttle.</p><code class="path">lwc/functionUtils</code></div>
+        <div class="card"><h3>objectUtils</h3><p>Deep clone, deep equality, nested-path get/set.</p><code class="path">lwc/objectUtils</code></div>
+        <div class="card"><h3>jsonUtils</h3><p>Parse/stringify/pretty-print that never throws.</p><code class="path">lwc/jsonUtils</code></div>
+        <div class="card"><h3>urlUtils</h3><p>Query-string parse/build/read/update.</p><code class="path">lwc/urlUtils</code></div>
+      </div>
+
+      <div class="cat-heading">Salesforce utilities</div>
+      <div class="grid">
+        <div class="card"><h3>apexErrorUtils</h3><p>Turns imperative Apex call errors into plain messages.</p><code class="path">lwc/apexErrorUtils</code></div>
+        <div class="card"><h3>ldsErrorUtils</h3><p>Same, for Lightning Data Service/UI API errors.</p><code class="path">lwc/ldsErrorUtils</code></div>
+        <div class="card"><h3>navigationUtils</h3><p>NavigationMixin boilerplate wrapped in plain functions.</p><code class="path">lwc/navigationUtils</code></div>
+        <div class="card"><h3>recordUtils</h3><p>Pairs <code>refreshApex</code> with <code>notifyRecordUpdateAvailable</code>.</p><code class="path">lwc/recordUtils</code></div>
+        <div class="card"><h3>permissionUtils</h3><p>Cached client wrapper over <code>PermissionService.cls</code>.</p><code class="path">lwc/permissionUtils</code></div>
+        <div class="card"><h3>metadataUtils</h3><p>Cached client wrapper over <code>CustomMetadataService.cls</code>.</p><code class="path">lwc/metadataUtils</code></div>
+        <div class="card"><h3>toastService</h3><p>Consistent <code>ShowToastEvent</code> dispatch with de-duplication.</p><code class="path">lwc/toastService</code></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="wrap">
+      <h2>Getting started</h2>
+      <p class="section-lead">Full detail, every property, every method: see the <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">usage guide</a>. The short version:</p>
+      <pre><code>sf org create scratch -f config/project-scratch-def.json -a lwc-toolkit -d 7
+sf project deploy start -o lwc-toolkit
+sf org assign permset -o lwc-toolkit -n LWCToolkitAdmin
+sf org open -o lwc-toolkit</code></pre>
+      <p>Then drop <strong>Enterprise Datatable Demo (Accounts)</strong> onto any App/Record/Home page from Lightning App Builder.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <p>
+      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit">amitshq/salesforce-lwc-production-toolkit</a>
+      &middot; MIT License &middot;
+      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/README.md">README</a>
+      &middot;
+      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Usage guide</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
