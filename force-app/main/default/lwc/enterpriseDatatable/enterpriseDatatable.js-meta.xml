@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>61.0</apiVersion>
+    <isExposed>true</isExposed>
+    <masterLabel>Enterprise Datatable</masterLabel>
+    <description>Generic server-side datatable: paging, sorting, filtering, search, inline edit, bulk save/delete and partial-error reporting for any object.</description>
+    <targets>
+        <target>lightning__AppPage</target>
+        <target>lightning__RecordPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+    <targetConfigs>
+        <targetConfig targets="lightning__AppPage,lightning__RecordPage,lightning__HomePage">
+            <property name="objectApiName" type="String" label="Object API Name" default="Account" />
+            <property name="title" type="String" label="Card Title" default="Records" />
+            <property name="pageSize" type="Integer" label="Page Size" default="25" />
+            <property
+                name="paginationMode"
+                type="String"
+                label="Pagination Mode"
+                default="pages"
+                datasource="pages,infinite"
+            />
+            <property name="enableRowSelection" type="Boolean" label="Enable Row Selection" default="false" />
+            <property name="enableBulkDelete" type="Boolean" label="Enable Bulk Delete" default="false" />
+            <property name="hideRefreshButton" type="Boolean" label="Hide Refresh Button" default="false" />
+        </targetConfig>
+    </targetConfigs>
+</LightningComponentBundle>

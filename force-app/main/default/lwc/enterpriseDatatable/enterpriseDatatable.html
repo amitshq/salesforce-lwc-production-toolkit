@@ -1,0 +1,88 @@
+<template>
+    <lightning-card title={title} icon-name="standard:related_list">
+        <template if:false={hideRefreshButton}>
+            <lightning-button-icon
+                slot="actions"
+                icon-name="utility:refresh"
+                alternative-text="Refresh"
+                title="Refresh"
+                onclick={handleRefreshClick}
+            ></lightning-button-icon>
+        </template>
+
+        <template if:true={hasSearch}>
+            <div class="slds-p-horizontal_medium slds-p-bottom_small">
+                <lightning-input
+                    type="search"
+                    label="Search"
+                    variant="label-hidden"
+                    placeholder={searchPlaceholder}
+                    onchange={handleSearchInput}
+                ></lightning-input>
+            </div>
+        </template>
+
+        <template if:true={hasFilterableColumns}>
+            <div class="slds-p-horizontal_medium slds-p-bottom_small slds-grid slds-wrap slds-gutters_x-small">
+                <template for:each={filterableColumns} for:item="column">
+                    <div key={column.fieldName} class="slds-col slds-size_1-of-4 slds-p-bottom_x-small">
+                        <lightning-input
+                            label={column.label}
+                            variant="label-stacked"
+                            data-field-name={column.fieldName}
+                            onchange={handleColumnFilterInput}
+                        ></lightning-input>
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <c-state-manager
+            is-loading={isInitialLoading}
+            has-error={hasError}
+            error-message={errorMessage}
+            is-empty={isEmpty}
+            empty-title="No records found"
+        >
+            <lightning-datatable
+                key-field={keyField}
+                data={records}
+                columns={tableColumns}
+                sorted-by={sortedBy}
+                sorted-direction={sortedDirection}
+                onsort={handleSort}
+                draft-values={draftValues}
+                onsave={handleSave}
+                oncancel={handleCancelEdit}
+                errors={datatableErrors}
+                is-loading={isReloading}
+                hide-checkbox-column={hideCheckboxColumn}
+                onrowselection={handleRowSelection}
+                selected-rows={selectedRows}
+            ></lightning-datatable>
+        </c-state-manager>
+
+        <c-bulk-action-bar
+            selected-count={selectedRows.length}
+            actions={resolvedBulkActions}
+            onaction={handleBulkAction}
+            onclear={handleBulkActionClear}
+        ></c-bulk-action-bar>
+
+        <template if:true={isPagesMode}>
+            <div class="slds-p-around_small slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
+                <lightning-button label="Previous" onclick={handlePreviousClick} disabled={isFirstPage}></lightning-button>
+                <span class="slds-text-body_small slds-text-color_weak">{pageStatusLabel}</span>
+                <lightning-button label="Next" onclick={handleNextClick} disabled={isLastPage}></lightning-button>
+            </div>
+        </template>
+
+        <template if:true={isInfiniteMode}>
+            <c-infinite-scroll-loader
+                is-loading={isLoadingMore}
+                disabled={isLoadMoreDisabled}
+                onloadmore={handleLoadMore}
+            ></c-infinite-scroll-loader>
+        </template>
+    </lightning-card>
+</template>

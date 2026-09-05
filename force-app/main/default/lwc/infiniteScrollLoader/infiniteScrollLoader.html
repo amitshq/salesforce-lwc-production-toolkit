@@ -1,0 +1,8 @@
+<template>
+    <div data-sentinel class="slds-is-relative" style="min-height: 1px;"></div>
+    <template if:true={isLoading}>
+        <div class="slds-align_absolute-center slds-p-around_small">
+            <lightning-spinner alternative-text="Loading more" size="x-small"></lightning-spinner>
+        </div>
+    </template>
+</template>

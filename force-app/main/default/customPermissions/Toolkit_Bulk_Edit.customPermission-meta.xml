@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomPermission xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Toolkit Bulk Edit</label>
+    <description>Grants access to bulk inline-edit and bulk-action controls in c-enterprise-datatable. Checked client-side via permissionUtils.hasCustomPermission and enforced server-side by GenericDmlService's FLS/CRUD checks.</description>
+</CustomPermission>

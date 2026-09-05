@@ -1,0 +1,5 @@
+**/jsconfig.json
+**/.eslintrc.json
+**/__tests__/**
+**/*.test.js
+**/jest.config.js

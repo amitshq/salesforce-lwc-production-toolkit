@@ -1,0 +1,22 @@
+{
+  "name": "salesforce-lwc-production-toolkit",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Reusable, production-grade Lightning Web Components and Apex services for enterprise Salesforce projects.",
+  "scripts": {
+    "test": "sfdx-lwc-jest --skipApiVersionCheck",
+    "test:watch": "sfdx-lwc-jest --watch --skipApiVersionCheck",
+    "test:coverage": "sfdx-lwc-jest --coverage --skipApiVersionCheck",
+    "lint": "eslint force-app/main/default/lwc/**/*.js",
+    "prettier": "prettier --write \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
+    "prettier:verify": "prettier --check \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\""
+  },
+  "devDependencies": {
+    "@prettier/plugin-xml": "^3.4.1",
+    "@salesforce/eslint-config-lwc": "^3.7.1",
+    "@salesforce/sfdx-lwc-jest": "^7.0.1",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3",
+    "prettier-plugin-apex": "^2.2.0"
+  }
+}

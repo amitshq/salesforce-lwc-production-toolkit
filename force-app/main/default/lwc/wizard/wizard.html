@@ -1,0 +1,28 @@
+<template>
+    <template if:false={hideIndicator}>
+        <lightning-progress-indicator
+            current-step={currentStepValue}
+            type={indicatorType}
+            onstepclick={handleIndicatorStepClick}
+            class="slds-p-bottom_medium"
+        >
+            <template for:each={steps} for:item="step">
+                <lightning-progress-step key={step.value} label={step.label} value={step.value}></lightning-progress-step>
+            </template>
+        </lightning-progress-indicator>
+    </template>
+
+    <slot onslotchange={handleSlotChange}></slot>
+
+    <template if:false={hideNavigation}>
+        <div class="slds-grid slds-grid_align-spread slds-p-top_medium">
+            <lightning-button label={backLabel} onclick={handleBackClick} disabled={isFirstStep}></lightning-button>
+            <template if:false={isLastStep}>
+                <lightning-button label={nextLabel} variant="brand" onclick={handleNextClick}></lightning-button>
+            </template>
+            <template if:true={isLastStep}>
+                <lightning-button label={finishLabel} variant="success" onclick={handleFinishClick}></lightning-button>
+            </template>
+        </div>
+    </template>
+</template>

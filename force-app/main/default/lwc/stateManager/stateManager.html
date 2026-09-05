@@ -1,0 +1,22 @@
+<template>
+    <template if:true={showLoading}>
+        <slot name="loading">
+            <div class="slds-align_absolute-center slds-p-around_large">
+                <lightning-spinner alternative-text={loadingLabel} size="medium"></lightning-spinner>
+            </div>
+        </slot>
+    </template>
+    <template if:true={showError}>
+        <slot name="error">
+            <c-error-state message={errorMessage}></c-error-state>
+        </slot>
+    </template>
+    <template if:true={showEmpty}>
+        <slot name="empty">
+            <c-empty-state title={emptyTitle} message={emptyMessage} icon-name={emptyIconName}></c-empty-state>
+        </slot>
+    </template>
+    <template if:true={showContent}>
+        <slot></slot>
+    </template>
+</template>

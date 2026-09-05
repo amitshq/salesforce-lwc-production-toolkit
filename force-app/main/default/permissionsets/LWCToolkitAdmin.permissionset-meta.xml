@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>LWC Toolkit Admin</label>
+    <description>Access to the salesforce-lwc-production-toolkit generic Apex services and demo custom metadata/permission, for admins and developers exercising the enterpriseDatatable demo.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <classAccesses>
+        <apexClass>GenericQueryService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>GenericDmlService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>PermissionService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>CustomMetadataService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>Toolkit_Bulk_Edit</name>
+    </customPermissions>
+    <fieldPermissions>
+        <field>ToolkitDemoSetting__mdt.IsEnabled__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>ToolkitDemoSetting__mdt.Description__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>ToolkitDemoSetting__mdt.DefaultPageSize__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+</PermissionSet>

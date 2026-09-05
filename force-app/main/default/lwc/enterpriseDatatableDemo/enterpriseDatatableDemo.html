@@ -1,0 +1,15 @@
+<template>
+    <c-enterprise-datatable
+        object-api-name="Account"
+        title="Accounts"
+        columns={columns}
+        page-size={pageSize}
+        search-fields={searchFields}
+        bulk-actions={bulkActions}
+        enable-row-selection
+        enable-bulk-delete={enableBulkDelete}
+        default-sort-field="Name"
+        default-sort-direction="asc"
+        onbulkaction={handleBulkAction}
+    ></c-enterprise-datatable>
+</template>

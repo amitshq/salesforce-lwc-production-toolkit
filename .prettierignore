@@ -1,0 +1,6 @@
+.sfdx/
+.sf/
+.localdevserver/
+coverage/
+node_modules/
+**/staticresources/**

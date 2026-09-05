@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Sample configuration record consumed by metadataUtils and the enterpriseDatatable demo, showing how CustomMetadataService loads admin-editable settings without a deployment.</description>
+    <label>Toolkit Demo Setting</label>
+    <pluralLabel>Toolkit Demo Settings</pluralLabel>
+    <visibility>Public</visibility>
+</CustomObject>

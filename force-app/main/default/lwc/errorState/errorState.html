@@ -1,0 +1,18 @@
+<template>
+    <div class="slds-illustration slds-illustration_small slds-p-around_large slds-text-align_center">
+        <lightning-icon icon-name="utility:error" size="large" variant="error" class="slds-m-bottom_small"></lightning-icon>
+        <h3 class="slds-text-heading_medium">{title}</h3>
+        <template if:true={message}>
+            <p class="slds-text-body_regular slds-text-color_weak">{message}</p>
+        </template>
+        <template if:true={showRetry}>
+            <lightning-button label={retryLabel} onclick={handleRetryClick} class="slds-m-top_small"></lightning-button>
+        </template>
+        <template if:true={hasDetails}>
+            <button class="slds-button slds-button_neutral slds-m-top_small" onclick={handleToggleDetails}>
+                {toggleLabel}
+            </button>
+            <pre class={detailsClass}>{details}</pre>
+        </template>
+    </div>
+</template>

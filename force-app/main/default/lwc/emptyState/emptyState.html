@@ -1,0 +1,12 @@
+<template>
+    <div class="slds-illustration slds-illustration_small slds-p-around_large slds-text-align_center">
+        <lightning-icon icon-name={iconName} size="large" class="slds-m-bottom_small"></lightning-icon>
+        <h3 class="slds-text-heading_medium">{title}</h3>
+        <template if:true={message}>
+            <p class="slds-text-body_regular slds-text-color_weak">{message}</p>
+        </template>
+        <div class="slds-m-top_small">
+            <slot name="actions"></slot>
+        </div>
+    </div>
+</template>

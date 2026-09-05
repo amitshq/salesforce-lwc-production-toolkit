@@ -1,0 +1,32 @@
+<template>
+    <template if:true={hasSelection}>
+        <div
+            class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-theme_shade slds-p-vertical_x-small slds-p-horizontal_small slds-border_top"
+        >
+            <div class="slds-grid slds-grid_vertical-align-center">
+                <lightning-button-icon
+                    icon-name="utility:close"
+                    alternative-text={clearLabel}
+                    title={clearLabel}
+                    onclick={handleClearClick}
+                    class="slds-m-right_x-small"
+                ></lightning-button-icon>
+                <span class="slds-text-body_small slds-text-color_weak">{countLabel}</span>
+            </div>
+            <div class="slds-grid">
+                <template for:each={actions} for:item="action">
+                    <lightning-button
+                        key={action.name}
+                        data-name={action.name}
+                        label={action.label}
+                        variant={action.variant}
+                        icon-name={action.iconName}
+                        disabled={action.disabled}
+                        onclick={handleActionClick}
+                        class="slds-m-left_x-small"
+                    ></lightning-button>
+                </template>
+            </div>
+        </div>
+    </template>
+</template>
