@@ -82,4 +82,54 @@ private class GenericQueryServiceTest {
         }
         System.assertEquals(true, threw, 'Unknown object names must raise a client-visible error.');
     }
+
+    @IsTest
+    static void cursorPaginationWalksForwardById() {
+        List<Account> allAccounts = [SELECT Id FROM Account ORDER BY Id ASC];
+
+        Test.startTest();
+        CursorQueryResult firstPage = GenericQueryService.queryWithCursor(
+            'Account',
+            new List<String>{ 'Name' },
+            null,
+            null,
+            null,
+            null,
+            2
+        );
+        CursorQueryResult secondPage = GenericQueryService.queryWithCursor(
+            'Account',
+            new List<String>{ 'Name' },
+            null,
+            null,
+            null,
+            firstPage.nextCursor,
+            2
+        );
+        Test.stopTest();
+
+        System.assertEquals(2, firstPage.records.size());
+        System.assertEquals(true, firstPage.hasMore);
+        System.assertEquals(allAccounts[0].Id, firstPage.records[0].Id);
+        System.assertEquals(allAccounts[2].Id, secondPage.records[0].Id, 'Second page should resume right after the cursor.');
+    }
+
+    @IsTest
+    static void cursorPaginationReportsNoMoreOnTheLastPage() {
+        Test.startTest();
+        CursorQueryResult lastPage = GenericQueryService.queryWithCursor(
+            'Account',
+            new List<String>{ 'Name' },
+            null,
+            null,
+            null,
+            null,
+            10
+        );
+        Test.stopTest();
+
+        System.assertEquals(5, lastPage.records.size());
+        System.assertEquals(false, lastPage.hasMore);
+        System.assertEquals(null, lastPage.nextCursor);
+    }
 }

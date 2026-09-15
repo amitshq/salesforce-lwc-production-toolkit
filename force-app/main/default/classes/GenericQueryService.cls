@@ -48,18 +48,7 @@ public with sharing class GenericQueryService {
 
             Map<String, Object> binds = new Map<String, Object>();
             List<String> whereClauses = buildFilterClauses(filters, fieldMap, binds);
-
-            if (String.isNotBlank(searchTerm) && searchFields != null && !searchFields.isEmpty()) {
-                List<String> safeSearchFields = allowListFields(searchFields, fieldMap);
-                if (!safeSearchFields.isEmpty()) {
-                    List<String> searchClauses = new List<String>();
-                    binds.put('searchTerm', '%' + String.escapeSingleQuotes(searchTerm) + '%');
-                    for (String searchField : safeSearchFields) {
-                        searchClauses.add(searchField + ' LIKE :searchTerm');
-                    }
-                    whereClauses.add('(' + String.join(searchClauses, ' OR ') + ')');
-                }
-            }
+            appendSearchClause(whereClauses, binds, searchTerm, searchFields, fieldMap);
 
             String whereClause = whereClauses.isEmpty() ? '' : ' WHERE ' + String.join(whereClauses, ' AND ');
 
@@ -96,6 +85,93 @@ public with sharing class GenericQueryService {
         } catch (Exception e) {
             throw new AuraHandledException('Unable to run query: ' + e.getMessage());
         }
+    }
+
+    /**
+     * Keyset (cursor) pagination: instead of LIMIT/OFFSET, which gets slower
+     * the deeper you page (the database still has to walk past every
+     * skipped row), each page asks for rows with Id greater than the last
+     * Id it saw. Cheap at any depth, at the cost of a fixed Id-ascending
+     * sort order and no jump-to-page-N - the right trade for infinite
+     * scroll or "load more" over a large or fast-growing table.
+     */
+    @AuraEnabled(cacheable=true)
+    public static CursorQueryResult queryWithCursor(
+        String objectApiName,
+        List<String> fields,
+        List<QueryFilter> filters,
+        String searchTerm,
+        List<String> searchFields,
+        String afterId,
+        Integer pageSize
+    ) {
+        try {
+            Schema.DescribeSObjectResult objectDescribe = describeObject(objectApiName);
+            Map<String, Schema.SObjectField> fieldMap = objectDescribe.fields.getMap();
+
+            List<String> safeFields = allowListFields(fields, fieldMap);
+            if (!safeFields.contains('Id')) {
+                safeFields.add(0, 'Id');
+            }
+
+            Map<String, Object> binds = new Map<String, Object>();
+            List<String> whereClauses = buildFilterClauses(filters, fieldMap, binds);
+            appendSearchClause(whereClauses, binds, searchTerm, searchFields, fieldMap);
+
+            if (String.isNotBlank(afterId)) {
+                binds.put('afterId', afterId);
+                whereClauses.add('Id > :afterId');
+            }
+            String whereClause = whereClauses.isEmpty() ? '' : ' WHERE ' + String.join(whereClauses, ' AND ');
+
+            Integer safePageSize = normalizePageSize(pageSize);
+            // Fetch one extra row past the page size purely to learn whether a next page exists.
+            binds.put('limitSize', safePageSize + 1);
+
+            String selectQuery =
+                'SELECT ' +
+                String.join(safeFields, ', ') +
+                ' FROM ' +
+                objectDescribe.getName() +
+                whereClause +
+                ' ORDER BY Id ASC LIMIT :limitSize';
+
+            List<SObject> records = Database.queryWithBinds(selectQuery, binds, AccessLevel.USER_MODE);
+
+            Boolean hasMore = records.size() > safePageSize;
+            if (hasMore) {
+                records.remove(records.size() - 1);
+            }
+            String nextCursor = (hasMore && !records.isEmpty()) ? String.valueOf(records[records.size() - 1].get('Id')) : null;
+
+            return new CursorQueryResult(records, hasMore, nextCursor);
+        } catch (QueryServiceException qse) {
+            throw new AuraHandledException(qse.getMessage());
+        } catch (Exception e) {
+            throw new AuraHandledException('Unable to run query: ' + e.getMessage());
+        }
+    }
+
+    private static void appendSearchClause(
+        List<String> whereClauses,
+        Map<String, Object> binds,
+        String searchTerm,
+        List<String> searchFields,
+        Map<String, Schema.SObjectField> fieldMap
+    ) {
+        if (String.isBlank(searchTerm) || searchFields == null || searchFields.isEmpty()) {
+            return;
+        }
+        List<String> safeSearchFields = allowListFields(searchFields, fieldMap);
+        if (safeSearchFields.isEmpty()) {
+            return;
+        }
+        List<String> searchClauses = new List<String>();
+        binds.put('searchTerm', '%' + String.escapeSingleQuotes(searchTerm) + '%');
+        for (String searchField : safeSearchFields) {
+            searchClauses.add(searchField + ' LIKE :searchTerm');
+        }
+        whereClauses.add('(' + String.join(searchClauses, ' OR ') + ')');
     }
 
     private static Schema.DescribeSObjectResult describeObject(String objectApiName) {

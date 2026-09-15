@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningMessageChannel xmlns="http://soap.sforce.com/2006/04/metadata">
+    <masterLabel>Toolkit Message Channel</masterLabel>
+    <isExposed>true</isExposed>
+    <description>Generic cross-component channel for lmsUtils - publish a record Id and/or a small JSON payload to every listening component on the page, regardless of where each one sits in the component tree.</description>
+    <lightningMessageFields>
+        <fieldName>recordId</fieldName>
+        <description>Id of the record the message refers to, if any.</description>
+    </lightningMessageFields>
+    <lightningMessageFields>
+        <fieldName>payload</fieldName>
+        <description>Arbitrary JSON-serializable data for the message.</description>
+    </lightningMessageFields>
+</LightningMessageChannel>

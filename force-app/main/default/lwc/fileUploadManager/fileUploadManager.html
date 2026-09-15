@@ -1,0 +1,43 @@
+<template>
+    <lightning-card title={label} icon-name="standard:file">
+        <template if:false={hideUploadArea}>
+            <div class="slds-p-horizontal_medium slds-p-bottom_small">
+                <lightning-file-upload
+                    label="Upload Files"
+                    record-id={recordId}
+                    accept={acceptedFormats}
+                    multiple={multiple}
+                    onuploadfinished={handleUploadFinished}
+                ></lightning-file-upload>
+            </div>
+        </template>
+
+        <c-state-manager is-loading={isLoading} has-error={hasError} error-message={errorMessage} is-empty={isEmpty} empty-title="No files yet">
+            <ul class="slds-has-dividers_around-space">
+                <template for:each={files} for:item="file">
+                    <li key={file.contentDocumentId} class="slds-item slds-p-around_small">
+                        <div class="slds-media slds-media_center">
+                            <div class="slds-media__figure">
+                                <lightning-icon icon-name={file.iconName} size="small"></lightning-icon>
+                            </div>
+                            <div class="slds-media__body">
+                                <p class="slds-text-body_regular">{file.title}</p>
+                                <p class="slds-text-body_small slds-text-color_weak">{file.sizeLabel}</p>
+                            </div>
+                            <div class="slds-media__figure slds-media__figure_reverse">
+                                <lightning-button-icon
+                                    icon-name="utility:delete"
+                                    alternative-text="Delete"
+                                    title="Delete"
+                                    data-id={file.contentDocumentId}
+                                    data-title={file.title}
+                                    onclick={handleDeleteClick}
+                                ></lightning-button-icon>
+                            </div>
+                        </div>
+                    </li>
+                </template>
+            </ul>
+        </c-state-manager>
+    </lightning-card>
+</template>

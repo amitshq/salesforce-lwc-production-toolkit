@@ -1,0 +1,10 @@
+<template>
+    <template if:true={showContent}>
+        <slot></slot>
+    </template>
+    <template if:true={showNoAccess}>
+        <slot name="noaccess">
+            <p class="slds-text-color_weak slds-text-body_small">You don't have access to view this.</p>
+        </slot>
+    </template>
+</template>

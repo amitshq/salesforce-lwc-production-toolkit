@@ -1,0 +1,61 @@
+<template>
+    <div class="slds-grid slds-grid_vertical slds-gutters_x-small">
+        <template for:each={renderedRows} for:item="row">
+            <div key={row.key} class="slds-col slds-grid slds-gutters_x-small slds-p-bottom_x-small slds-grid_vertical-align-end">
+                <div class="slds-col slds-size_3-of-8">
+                    <lightning-combobox
+                        label="Field"
+                        variant="label-hidden"
+                        placeholder="Field"
+                        value={row.fieldName}
+                        options={fieldOptions}
+                        data-key={row.key}
+                        onchange={handleFieldChange}
+                    ></lightning-combobox>
+                </div>
+                <div class="slds-col slds-size_2-of-8">
+                    <lightning-combobox
+                        label="Operator"
+                        variant="label-hidden"
+                        value={row.operatorName}
+                        options={row.operatorOptions}
+                        data-key={row.key}
+                        onchange={handleOperatorChange}
+                    ></lightning-combobox>
+                </div>
+                <div class="slds-col slds-size_2-of-8">
+                    <template if:true={row.isBoolean}>
+                        <lightning-input
+                            type="checkbox"
+                            label="Value"
+                            variant="label-hidden"
+                            checked={row.value}
+                            data-key={row.key}
+                            onchange={handleValueChange}
+                        ></lightning-input>
+                    </template>
+                    <template if:false={row.isBoolean}>
+                        <lightning-input
+                            type={row.inputType}
+                            label="Value"
+                            variant="label-hidden"
+                            value={row.value}
+                            data-key={row.key}
+                            onchange={handleValueChange}
+                        ></lightning-input>
+                    </template>
+                </div>
+                <div class="slds-col slds-size_1-of-8">
+                    <lightning-button-icon
+                        icon-name="utility:delete"
+                        alternative-text="Remove filter"
+                        title="Remove filter"
+                        data-key={row.key}
+                        onclick={handleRemoveClick}
+                    ></lightning-button-icon>
+                </div>
+            </div>
+        </template>
+    </div>
+    <lightning-button label={addLabel} icon-name="utility:add" onclick={handleAddClick}></lightning-button>
+</template>

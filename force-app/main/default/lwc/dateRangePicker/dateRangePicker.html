@@ -1,0 +1,41 @@
+<template>
+    <fieldset class="slds-form-element">
+        <legend if:true={label} class="slds-form-element__legend slds-form-element__label">{label}</legend>
+        <div class="slds-grid slds-gutters_x-small slds-wrap">
+            <div class="slds-col slds-size_1-of-2 slds-medium-size_5-of-12">
+                <lightning-input
+                    type="date"
+                    label="Start"
+                    value={startDate}
+                    required={required}
+                    onchange={handleStartChange}
+                ></lightning-input>
+            </div>
+            <div class="slds-col slds-size_1-of-2 slds-medium-size_5-of-12">
+                <lightning-input
+                    type="date"
+                    label="End"
+                    value={endDate}
+                    required={required}
+                    onchange={handleEndChange}
+                ></lightning-input>
+            </div>
+        </div>
+        <template if:true={hasError}>
+            <p class="slds-text-color_error slds-text-body_small slds-p-top_xx-small">{errorMessage}</p>
+        </template>
+        <template if:false={hidePresets}>
+            <div class="slds-p-top_x-small slds-grid slds-wrap" style="gap: 0.375rem;">
+                <template for:each={presets} for:item="preset">
+                    <lightning-button
+                        key={preset.label}
+                        label={preset.label}
+                        variant="neutral"
+                        data-label={preset.label}
+                        onclick={handlePresetClick}
+                    ></lightning-button>
+                </template>
+            </div>
+        </template>
+    </fieldset>
+</template>

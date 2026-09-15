@@ -1,0 +1,20 @@
+<template>
+    <div class={cardClass}>
+        <div class="kpi-header">
+            <span class="kpi-label">{label}</span>
+            <template if:true={iconName}>
+                <lightning-icon icon-name={iconName} size="small" class="kpi-icon"></lightning-icon>
+            </template>
+        </div>
+        <div class="kpi-value">{formattedValue}</div>
+        <template if:true={hasTrend}>
+            <div class={trendClass}>
+                <lightning-icon icon-name={trendIconName} size="xx-small"></lightning-icon>
+                <span>{trendDisplay}</span>
+                <template if:true={trendLabel}>
+                    <span class="trend-label">{trendLabel}</span>
+                </template>
+            </div>
+        </template>
+    </div>
+</template>

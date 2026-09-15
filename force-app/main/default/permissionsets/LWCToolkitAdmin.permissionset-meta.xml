@@ -19,6 +19,10 @@
         <apexClass>CustomMetadataService</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>FileManagerService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <customPermissions>
         <enabled>true</enabled>
         <name>Toolkit_Bulk_Edit</name>

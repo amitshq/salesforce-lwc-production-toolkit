@@ -38,25 +38,29 @@ npm run lint         # ESLint
 npm run prettier     # format everything
 ```
 
-125 Jest tests and 22 Apex test methods cover the components and services below.
+190 Jest tests and 24 Apex test methods cover the components and services below.
 
 ## Architecture
 
 ```
 force-app/main/default/
-├── classes/          Generic Apex services (query, DML, permissions, custom metadata)
+├── classes/          Generic Apex services (query, DML, permissions, custom metadata, files)
 ├── customMetadata/   Demo config record consumed by metadataUtils
 ├── customPermissions/  Toolkit_Bulk_Edit, gating bulk edit/delete in the demo
+├── messageChannels/   ToolkitMessageChannel, backing lmsUtils
 ├── objects/           ToolkitDemoSetting__mdt (the demo's configuration type)
 ├── permissionsets/     LWCToolkitAdmin
 └── lwc/
     ├── enterpriseDatatable/       the flagship component
     ├── enterpriseDatatableDemo/   ready-to-drop Account example
+    ├── multiSelectLookup, dynamicFilterPanel, dynamicForm, pagination,
+    │   fileUploadManager, imageGallery                other data components
     ├── modal, confirmDialog, wizard, stateManager, emptyState, errorState,
-    │   bulkActionBar, infiniteScrollLoader        UX components
+    │   bulkActionBar, infiniteScrollLoader, permissionGate, featureGate,
+    │   kpiCard, dateRangePicker                        UX components
     └── functionUtils, objectUtils, jsonUtils, urlUtils, apexErrorUtils,
         ldsErrorUtils, navigationUtils, recordUtils, permissionUtils,
-        metadataUtils, toastService                data/Salesforce utility modules
+        metadataUtils, toastService, lmsUtils           data/Salesforce utility modules
 ```
 
 ### The generic Apex layer
@@ -125,6 +129,13 @@ What it does with that config:
 | Multi-select | `enterpriseDatatable`'s `enable-row-selection` (native `lightning-datatable` checkboxes) |
 | Inline editing | `enterpriseDatatable`'s `draft-values`/`onsave` wired to `GenericDmlService` |
 | Bulk actions | [`bulkActionBar`](force-app/main/default/lwc/bulkActionBar) (standalone) + `enterpriseDatatable`'s `bulk-actions`/`enable-bulk-delete` |
+| Advanced data table | `enterpriseDatatable` above &mdash; this *is* that component, not a second one |
+| Multi-select lookup | [`multiSelectLookup`](force-app/main/default/lwc/multiSelectLookup) - type-to-search against any object via `GenericQueryService` |
+| Dynamic filter panel | [`dynamicFilterPanel`](force-app/main/default/lwc/dynamicFilterPanel) - builds `QueryFilter[]` for `GenericQueryService`/`enterpriseDatatable` |
+| Dynamic form | [`dynamicForm`](force-app/main/default/lwc/dynamicForm) - renders from a field-config array, field-level-access-aware |
+| Pagination / keyset pagination | [`pagination`](force-app/main/default/lwc/pagination) (standalone) + [`GenericQueryService.queryWithCursor`](force-app/main/default/classes/GenericQueryService.cls) |
+| File upload manager | [`fileUploadManager`](force-app/main/default/lwc/fileUploadManager) + [`FileManagerService.cls`](force-app/main/default/classes/FileManagerService.cls) |
+| Image gallery | [`imageGallery`](force-app/main/default/lwc/imageGallery) - thumbnail grid + `c-modal` lightbox |
 
 ### UX components
 
@@ -137,6 +148,12 @@ What it does with that config:
 | Empty-state component | [`emptyState`](force-app/main/default/lwc/emptyState) |
 | Error-state component | [`errorState`](force-app/main/default/lwc/errorState) |
 | Wizard/stepper | [`wizard`](force-app/main/default/lwc/wizard) - `lightning-progress-indicator` + cancelable `beforestepchange` for per-step validation |
+| Confirmation modal | `confirmDialog` above |
+| Error panel | `errorState` above |
+| Permission-aware component | [`permissionGate`](force-app/main/default/lwc/permissionGate) - gates slotted content on object/field/custom-permission checks |
+| Metadata-driven configuration provider | [`featureGate`](force-app/main/default/lwc/featureGate) - feature-flag gating driven by any Custom Metadata Type |
+| KPI dashboard card | [`kpiCard`](force-app/main/default/lwc/kpiCard) |
+| Date range picker | [`dateRangePicker`](force-app/main/default/lwc/dateRangePicker) - with quick-range presets |
 
 ### Data utilities
 
@@ -159,9 +176,12 @@ What it does with that config:
 | Record refresh helpers | [`recordUtils`](force-app/main/default/lwc/recordUtils) - pairs `refreshApex` with `notifyRecordUpdateAvailable` in one call |
 | Permission checking | [`permissionUtils`](force-app/main/default/lwc/permissionUtils) + [`PermissionService.cls`](force-app/main/default/classes/PermissionService.cls) |
 | Custom metadata configuration loader | [`metadataUtils`](force-app/main/default/lwc/metadataUtils) + [`CustomMetadataService.cls`](force-app/main/default/classes/CustomMetadataService.cls) |
+| LMS (Lightning Message Service) wrapper | [`lmsUtils`](force-app/main/default/lwc/lmsUtils) + [`ToolkitMessageChannel`](force-app/main/default/messageChannels) |
 
 ## Known limitations / extension points
 
 - The App Builder property panel only exposes `enterpriseDatatable`'s primitive properties (object, title, page size, ...) - `columns`, `staticFilters`, `bulkActions`, and `searchFields` are arrays/objects and must be set by wrapping the component in your own LWC (as `enterpriseDatatableDemo` does), not by an admin in Lightning App Builder.
 - `GenericDmlService` supports insert/update/delete; it does not run Apex triggers differently than any other DML, so validation rules/triggers on the target object still apply and their errors surface through the normal partial-error path.
 - Custom Metadata field-level filtering in `metadataUtils`/`CustomMetadataService` returns full records (no server-side filtering by field value) - it's a configuration loader, not a query engine; use `GenericQueryService` if you need to query a `__mdt` type with filters.
+- `dynamicForm`'s `picklist` field type doesn't call `getPicklistValuesByRecordType` for you - pass `options` explicitly, since record-type-aware picklists are a meaningfully bigger feature than this component takes on.
+- `GenericQueryService.queryWithCursor` (keyset pagination) is always sorted `Id ASC` - it doesn't support arbitrary-field sort with tie-breaking, which is a substantially more complex feature; use `query()` (offset pagination) when you need to sort by something else.

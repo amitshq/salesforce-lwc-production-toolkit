@@ -1,0 +1,23 @@
+<template>
+    <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-gutters_x-small">
+        <span class="slds-text-body_small slds-text-color_weak">{statusLabel}</span>
+        <div class="slds-grid slds-gutters_xx-small">
+            <div class="slds-col">
+                <lightning-button label="Previous" onclick={handlePreviousClick} disabled={isFirstPage}></lightning-button>
+            </div>
+            <template for:each={pageButtons} for:item="button">
+                <div key={button.page} class="slds-col">
+                    <lightning-button
+                        label={button.label}
+                        variant={button.variant}
+                        data-page={button.page}
+                        onclick={handlePageButtonClick}
+                    ></lightning-button>
+                </div>
+            </template>
+            <div class="slds-col">
+                <lightning-button label="Next" onclick={handleNextClick} disabled={isLastPage}></lightning-button>
+            </div>
+        </div>
+    </div>
+</template>

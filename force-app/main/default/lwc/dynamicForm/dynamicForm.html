@@ -1,0 +1,66 @@
+<template>
+    <div class="slds-grid slds-grid_vertical slds-gutters_x-small">
+        <template for:each={renderedFields} for:item="field">
+            <div key={field.apiName} class="slds-col slds-p-bottom_small">
+                <template if:true={field.isPlainInput}>
+                    <lightning-input
+                        type={field.inputType}
+                        label={field.label}
+                        required={field.required}
+                        disabled={field.disabled}
+                        value={field.value}
+                        field-level-help={field.helpText}
+                        data-api-name={field.apiName}
+                        onchange={handleFieldChange}
+                    ></lightning-input>
+                </template>
+                <template if:true={field.isCheckbox}>
+                    <lightning-input
+                        type="checkbox"
+                        label={field.label}
+                        disabled={field.disabled}
+                        checked={field.value}
+                        field-level-help={field.helpText}
+                        data-api-name={field.apiName}
+                        onchange={handleFieldChange}
+                    ></lightning-input>
+                </template>
+                <template if:true={field.isCombobox}>
+                    <lightning-combobox
+                        label={field.label}
+                        required={field.required}
+                        disabled={field.disabled}
+                        value={field.value}
+                        options={field.options}
+                        field-level-help={field.helpText}
+                        data-api-name={field.apiName}
+                        onchange={handleFieldChange}
+                    ></lightning-combobox>
+                </template>
+                <template if:true={field.isTextarea}>
+                    <lightning-textarea
+                        label={field.label}
+                        required={field.required}
+                        disabled={field.disabled}
+                        value={field.value}
+                        field-level-help={field.helpText}
+                        data-api-name={field.apiName}
+                        onchange={handleFieldChange}
+                    ></lightning-textarea>
+                </template>
+            </div>
+        </template>
+    </div>
+    <div class="slds-grid slds-grid_align-end slds-gutters_x-small slds-p-top_small">
+        <template if:false={hideCancelButton}>
+            <div class="slds-col_bump-left">
+                <lightning-button label={cancelLabel} onclick={handleCancelClick}></lightning-button>
+            </div>
+        </template>
+        <template if:false={hideSubmitButton}>
+            <div class="slds-col">
+                <lightning-button label={submitLabel} variant="brand" onclick={handleSubmitClick}></lightning-button>
+            </div>
+        </template>
+    </div>
+</template>

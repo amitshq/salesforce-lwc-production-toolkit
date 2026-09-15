@@ -1,0 +1,8 @@
+<template>
+    <template if:true={showEnabled}>
+        <slot></slot>
+    </template>
+    <template if:true={showDisabled}>
+        <slot name="disabled"></slot>
+    </template>
+</template>

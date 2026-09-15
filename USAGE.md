@@ -9,6 +9,13 @@ For the "why," see [README.md](README.md). This document only covers "how."
 - [Requirements](#requirements)
 - [Deploying this repo](#deploying-this-repo)
 - [Enterprise Datatable](#enterprise-datatable)
+- [Other data components](#other-data-components)
+  - [Multi-Select Lookup](#multi-select-lookup)
+  - [Dynamic Filter Panel](#dynamic-filter-panel)
+  - [Dynamic Form](#dynamic-form)
+  - [Pagination](#pagination)
+  - [File Upload Manager](#file-upload-manager)
+  - [Image Gallery](#image-gallery)
 - [UX components](#ux-components)
   - [Modal](#modal)
   - [Confirm Dialog](#confirm-dialog)
@@ -18,6 +25,10 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [Wizard](#wizard)
   - [Bulk Action Bar](#bulk-action-bar)
   - [Infinite Scroll Loader](#infinite-scroll-loader)
+  - [Permission Gate](#permission-gate)
+  - [Feature Gate](#feature-gate)
+  - [KPI Card](#kpi-card)
+  - [Date Range Picker](#date-range-picker)
 - [Data utility modules](#data-utility-modules)
   - [functionUtils](#functionutils)
   - [objectUtils](#objectutils)
@@ -31,11 +42,13 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [permissionUtils](#permissionutils)
   - [metadataUtils](#metadatautils)
   - [toastService](#toastservice)
+  - [lmsUtils](#lmsutils)
 - [Apex services](#apex-services)
   - [GenericQueryService](#genericqueryservice)
   - [GenericDmlService](#genericdmlservice)
   - [PermissionService](#permissionservice-apex)
   - [CustomMetadataService](#custommetadataservice-apex)
+  - [FileManagerService](#filemanagerservice-apex)
 - [Running the tests](#running-the-tests)
 
 ---
@@ -156,6 +169,165 @@ Set `editable: true` on a column to enable inline editing (native `lightning-dat
 ### Bulk delete
 
 Set `enable-bulk-delete`. The delete action only appears if `PermissionService.checkObjectAccess` reports the object as deletable for the running user. Clicking it opens `c-confirm-dialog`; on confirmation, selected rows are sent to `GenericDmlService.deleteRecords`, which also reports partial failures.
+
+---
+
+## Other data components
+
+### Multi-Select Lookup
+
+`c-multi-select-lookup` &mdash; type-to-search against any object (via `GenericQueryService` &mdash; no bespoke Apex controller), pick multiple records, remove them individually. Selected records render as pills.
+
+```html
+<c-multi-select-lookup
+    label="Contacts"
+    object-api-name="Contact"
+    label-field="Name"
+    search-fields={searchFields}
+    selected-records={selectedContacts}
+    onchange={handleContactsChange}
+></c-multi-select-lookup>
+```
+
+```js
+searchFields = ['Name', 'Email'];
+handleContactsChange(event) {
+    this.selectedContacts = event.detail.value; // [{ id, label }]
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `objectApiName` | String | — (required) | Object to search. |
+| `labelField` | String | `'Name'` | Field shown for each result and used as the default search field. |
+| `searchFields` | Array&lt;String&gt; | `[labelField]` | Fields searched (`LIKE`, OR'd). |
+| `staticFilters` | Array | `[]` | Always-applied `QueryFilter`s, same shape as `enterpriseDatatable`. |
+| `selectedRecords` | Array | `[]` | `[{ id, label }]`. Settable to pre-populate. |
+| `minSearchLength` | Number | `2` | Characters typed before a search fires. |
+| `pageSize` | Number | `10` | Max results shown per keystroke. |
+
+**Events**: `change` (`{ value: [{ id, label }] }`) — fired on every add/remove.
+
+Keyboard: Arrow Up/Down move the highlight, Enter selects, Escape closes the dropdown.
+
+### Dynamic Filter Panel
+
+`c-dynamic-filter-panel` &mdash; builds a list of filter conditions and emits them in exactly the `QueryFilter` shape `GenericQueryService.query()` expects, so it drops straight into `enterpriseDatatable`'s `static-filters` or a direct Apex call.
+
+```html
+<c-dynamic-filter-panel fields={filterableFields} onchange={handleFiltersChange}></c-dynamic-filter-panel>
+```
+
+```js
+filterableFields = [
+    { label: 'Industry', value: 'Industry', type: 'text' },
+    { label: 'Annual Revenue', value: 'AnnualRevenue', type: 'currency' },
+    { label: 'Active', value: 'IsActive__c', type: 'boolean' }
+];
+handleFiltersChange(event) {
+    this.filters = event.detail.value; // [{ fieldName, operatorName, value }]
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `fields` | Array | `[]` | `[{ label, value, type }]`. `type` is one of `text`, `number`, `currency`, `date`, `boolean`, `picklist` — it controls which operators and which input control are offered. |
+| `addLabel` | String | `'Add filter'` | Label on the "add a condition" button. |
+
+**Methods**: `addCondition()`, `clearAll()`, `value` (getter, current `QueryFilter[]`).
+
+**Events**: `change` (`{ value }`) — fired whenever a row is added, edited, or removed. Incomplete rows (no value entered yet) are excluded from `value`. `IN`/`NOT IN` operators split a comma-separated value into an array automatically.
+
+### Dynamic Form
+
+`c-dynamic-form` &mdash; renders a form from a plain field-config array instead of a fixed markup template. Pairs naturally with `GenericDmlService.saveRecords`: listen for `submit` and pass `event.detail.values` straight through as one row's `fields`.
+
+```html
+<c-dynamic-form fields={fields} object-api-name="Contact" onsubmit={handleSubmit}></c-dynamic-form>
+```
+
+```js
+fields = [
+    { apiName: 'LastName', label: 'Last Name', type: 'text', required: true },
+    { apiName: 'Email', label: 'Email', type: 'email' },
+    { apiName: 'Status__c', label: 'Status', type: 'picklist', options: [{ label: 'Active', value: 'Active' }] }
+];
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `fields` | Array | `[]` | `[{ apiName, label, type, required?, options?, defaultValue?, helpText? }]`. `type` is one of `text`, `email`, `phone`, `number`, `date`, `datetime`, `url`, `textarea`, `checkbox`/`boolean`, `picklist`/`select`. |
+| `objectApiName` | String | — | Optional. When set, each field's edit access is checked via `permissionUtils.getFieldAccess` and read-only fields are disabled &mdash; the server (`Security.stripInaccessible`) still enforces this regardless. |
+| `values` | Object | `{}` | Settable to pre-fill the form (edit mode). |
+| `submitLabel` / `cancelLabel` | String | `'Save'` / `'Cancel'` | Button labels. |
+| `hideCancelButton` / `hideSubmitButton` | Boolean | `false` | Hide either built-in button (e.g. to drive submission from your own toolbar). |
+
+**Methods**: `getValues()` (current values map), `reportValidity()` (runs each field's native validation, returns `Boolean`), `reset()`.
+
+**Events**: `submit` (`{ values }`) — only dispatched once `reportValidity()` passes. `cancel` (no detail).
+
+### Pagination
+
+`c-pagination` &mdash; standalone Previous/Next + numbered-page control. `enterpriseDatatable` has its own built-in pagination bar; this is for everything else (a related-list clone, a report viewer) that needs the same control on its own. Fully controlled: it renders from props and only ever asks for a change via events.
+
+```html
+<c-pagination
+    current-page={currentPage}
+    total-records={totalRecords}
+    page-size={pageSize}
+    onpagechange={handlePageChange}
+></c-pagination>
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `currentPage` | Number | `1` | |
+| `totalRecords` | Number | `0` | |
+| `pageSize` | Number | `25` | |
+| `maxPageButtons` | Number | `5` | How many numbered page buttons to show, windowed around the current page. |
+
+**Events**: `pagechange` (`{ page }`).
+
+For very large or fast-growing tables where OFFSET pagination gets slow at high page numbers, pair this with `GenericQueryService.queryWithCursor` (see [Apex services](#genericqueryservice)) instead of `query` &mdash; keyset pagination has no page-number concept, so drive it with a "Load more" affordance (e.g. `c-infinite-scroll-loader`) rather than `c-pagination`'s numbered buttons.
+
+### File Upload Manager
+
+`c-file-upload-manager` &mdash; upload (via the platform's own `lightning-file-upload`), list what's already attached to a record, and delete &mdash; instead of re-wiring `ContentDocumentLink` queries per project.
+
+```html
+<c-file-upload-manager record-id={recordId} accepted-formats={acceptedFormats}></c-file-upload-manager>
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `recordId` | String | — (required) | Record files are attached to/listed for. |
+| `label` | String | `'Files'` | Card title. |
+| `acceptedFormats` | Array&lt;String&gt; | `['.pdf', '.png', '.jpg', '.jpeg', '.docx', '.xlsx', '.csv', '.txt']` | Passed to `lightning-file-upload`'s `accept`. |
+| `singleFileOnly` | Boolean | `false` | Restrict to one file per upload. |
+| `hideUploadArea` | Boolean | `false` | Show only the file list (e.g. a read-only view). |
+
+**Methods**: `refresh()`.
+
+Backed by `FileManagerService.cls` (see [Apex services](#filemanagerservice-apex)) for listing/deleting; uploading itself is handled entirely by the base `lightning-file-upload` component.
+
+### Image Gallery
+
+`c-image-gallery` &mdash; thumbnail grid with a click-to-enlarge lightbox (built on `c-modal`, with Previous/Next navigation and Left/Right arrow-key support).
+
+```html
+<c-image-gallery images={images}></c-image-gallery>
+```
+
+```js
+images = [{ url: '/path/to/img.jpg', title: 'Site photo 1' }, ...];
+```
+
+Pair it with `FileManagerService.getFilesForRecord`'s `latestVersionId` (rendered as `/sfc/servlet.shepherd/version/download/{versionId}`) or any other image source.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `images` | Array | `[]` | `[{ url, title }]`. |
+| `columns` | Number | `4` | Grid columns. |
 
 ---
 
@@ -375,6 +547,95 @@ handleBeforeStepChange(event) {
 
 **Events**: `loadmore` (no detail).
 
+### Permission Gate
+
+`c-permission-gate` &mdash; declaratively gates slotted content behind an object/field/custom permission check, instead of every consumer wiring `permissionUtils` and a `v-if` by hand. All checks provided are AND'd together.
+
+This only hides/shows UI &mdash; it is not the security boundary. The real enforcement is server-side (`Security.stripInaccessible`, `AccessLevel.USER_MODE` in the Apex services); this component exists so users don't see controls they can't use, not to keep data from them.
+
+```html
+<c-permission-gate object-api-name="Account" required-access="delete">
+    <lightning-button label="Delete" variant="destructive"></lightning-button>
+    <div slot="noaccess">You don't have permission to delete accounts.</div>
+</c-permission-gate>
+
+<c-permission-gate custom-permission="Toolkit_Bulk_Edit">
+    <c-bulk-action-bar ...></c-bulk-action-bar>
+</c-permission-gate>
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `objectApiName` | String | — | Checks object-level access via `permissionUtils.getObjectAccess`. |
+| `requiredAccess` | String | `'read'` | `'read'`, `'create'`, `'edit'`, or `'delete'`. Applies to both the object check and, if set, the field check. |
+| `fieldApiName` | String | — | If set alongside `objectApiName`, also checks field-level access via `permissionUtils.getFieldAccess`. |
+| `customPermission` | String | — | Developer name of a Custom Permission to check via `permissionUtils.hasCustomPermission`. |
+
+**Slots**: default (shown when every configured check passes), `noaccess` (shown otherwise; defaults to a plain "You don't have access to view this." message).
+
+### Feature Gate
+
+`c-feature-gate` &mdash; feature-flag gate driven entirely by Custom Metadata: flip a feature on or off per org/sandbox by editing a metadata record, no deployment. Works against any `__mdt` type with a boolean field, not a hardcoded one.
+
+```html
+<c-feature-gate metadata-api-name="ToolkitDemoSetting__mdt" developer-name="Default" flag-field="IsEnabled__c">
+    <c-enterprise-datatable-demo></c-enterprise-datatable-demo>
+    <div slot="disabled">This feature is temporarily unavailable.</div>
+</c-feature-gate>
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `metadataApiName` | String | — (required) | The `__mdt` type to read. |
+| `developerName` | String | — (required) | The specific record's `DeveloperName`. |
+| `flagField` | String | `'IsEnabled__c'` | The boolean field checked. |
+| `invert` | Boolean | `false` | Show the default slot when the flag is `false` instead of `true`. |
+
+**Slots**: default (shown when enabled), `disabled` (shown when disabled; no fallback content, so by default disabled just means "show nothing"). A missing record, or a failed lookup, is treated as disabled.
+
+### KPI Card
+
+`c-kpi-card` &mdash; a single stat tile for dashboards: value, label, optional trend delta and icon. Purely presentational &mdash; feed it a number from wherever (an aggregate Apex method, `GenericQueryService`'s `totalCount`, a report).
+
+```html
+<c-kpi-card label="Open Opportunities" value={openCount} format="number" icon-name="utility:opportunity"></c-kpi-card>
+<c-kpi-card label="Win Rate" value={winRate} format="percent" trend="4.2" trend-label="vs last quarter"></c-kpi-card>
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `label` | String | `''` | |
+| `value` | String/Number | — | The raw value; formatted per `format`. |
+| `format` | String | `'none'` | `'none'`, `'number'`, `'currency'`, or `'percent'`. |
+| `currencyCode` | String | `'USD'` | Used when `format="currency"`. |
+| `trend` | Number | — | A delta, e.g. `4.2` or `-3`. Omit to hide the trend row entirely. |
+| `trendLabel` | String | `''` | e.g. `'vs last month'`. |
+| `iconName` | String | — | e.g. `'utility:opportunity'`. |
+| `variant` | String | `'base'` | `'base'`, `'success'`, `'warning'`, or `'error'` — sets the card's accent color. |
+
+### Date Range Picker
+
+`c-date-range-picker` &mdash; two date inputs plus quick-range presets (Today, Last 7 Days, Last 30 Days, This Month, Last Month), validated (start &le; end), emitting ISO date strings ready to drop into a `QueryFilter` (`>=` / `<=`) for `GenericQueryService` or `c-dynamic-filter-panel`.
+
+```html
+<c-date-range-picker label="Created Date" onchange={handleRangeChange}></c-date-range-picker>
+```
+
+```js
+handleRangeChange(event) {
+    const { startDate, endDate } = event.detail; // ISO date strings, e.g. '2024-06-01'
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `label` | String | `'Date Range'` | |
+| `startDate` / `endDate` | String | `''` | Settable ISO date strings. |
+| `required` | Boolean | `false` | |
+| `hidePresets` | Boolean | `false` | Hide the quick-range buttons. |
+
+**Events**: `change` (`{ startDate, endDate }`) &mdash; fired on every valid edit (including a preset click). Not fired while `startDate > endDate`; an inline error message shows instead.
+
 ---
 
 ## Data utility modules
@@ -566,6 +827,41 @@ showErrorToast(this, reduceApexErrors(error));
 | `showErrorToast` | `(component, messageOrMessages, title = 'Error')` — accepts a string or a `string[]` (e.g. from `reduceApexErrors`); uses `mode: 'sticky'`. |
 | `clearToastDedupeState` | `() => void` |
 
+### lmsUtils
+
+Thin wrapper around Lightning Message Service. Like `navigationUtils`, it can't wire `MessageContext` itself (only a component can), so every function takes the calling component's wired context as the first argument. Ships with one ready-to-use channel, `ToolkitMessageChannel__c` (fields: `recordId`, `payload`).
+
+```js
+import { MessageContext } from 'lightning/messageService';
+import TOOLKIT_CHANNEL from '@salesforce/messageChannel/ToolkitMessageChannel__c';
+import { createChannelController } from 'c/lmsUtils';
+
+export default class MyComponent extends LightningElement {
+    @wire(MessageContext) messageContext;
+    channel;
+
+    connectedCallback() {
+        this.channel = createChannelController(this.messageContext, TOOLKIT_CHANNEL);
+        this.channel.subscribe((message) => this.handleMessage(message));
+    }
+
+    disconnectedCallback() {
+        this.channel.unsubscribe();
+    }
+
+    notifyOthers(recordId) {
+        this.channel.publish({ recordId });
+    }
+}
+```
+
+| Function | Signature | Description |
+|---|---|---|
+| `publishMessage` | `(messageContext, channel, payload)` | Thin wrapper over `publish()`. |
+| `subscribeToChannel` | `(messageContext, channel, callback, options?) => subscription` | Thin wrapper over `subscribe()`. |
+| `unsubscribeFromChannel` | `(subscription)` | No-ops on a falsy subscription (safe to call unconditionally in `disconnectedCallback`). |
+| `createChannelController` | `(messageContext, channel) => { publish, subscribe, unsubscribe }` | Bundles a channel + context so calling `subscribe()` a second time replaces the first subscription instead of silently creating a duplicate. |
+
 ---
 
 ## Apex services
@@ -586,6 +882,20 @@ public static QueryResult query(
 - Unknown/inaccessible fields are silently dropped (not an error); an unknown object throws.
 - Field/object identifiers are validated against schema describes; values are bound via `Database.queryWithBinds` — never string-concatenated.
 - Relationship paths (`'Owner.Name'`) are supported and validated hop-by-hop.
+
+**Keyset (cursor) pagination**, for large or fast-growing tables where OFFSET gets slower the deeper you page:
+
+```apex
+@AuraEnabled(cacheable=true)
+public static CursorQueryResult queryWithCursor(
+    String objectApiName, List<String> fields, List<QueryFilter> filters,
+    String searchTerm, List<String> searchFields, String afterId, Integer pageSize
+)
+```
+
+- Returns a `CursorQueryResult`: `{ records, hasMore, nextCursor }`. There is no `totalCount` or page number &mdash; keyset pagination only ever knows "is there a next page" and "what cursor gets it".
+- Always sorted by `Id ASC` (the trade-off that makes it cheap at any depth); pass the previous page's `nextCursor` as `afterId` to get the next page. `nextCursor` is `null` when `hasMore` is `false`.
+- Same filter/search/security semantics as `query()`.
 
 ### GenericDmlService
 
@@ -631,17 +941,30 @@ public static SObject getRecordByDeveloperName(String metadataApiName, String de
 
 `metadataApiName` must end in `__mdt`; anything else throws. `Id`, `DeveloperName`, and `MasterLabel` are always included; `fieldNames` adds any further fields you request (silently dropped if unknown/inaccessible).
 
+### FileManagerService (Apex)
+
+```apex
+@AuraEnabled(cacheable=true)
+public static List<FileInfo> getFilesForRecord(Id recordId)
+// FileInfo => { contentDocumentId, latestVersionId, title, fileExtension, contentSize, createdDate }
+
+@AuraEnabled
+public static void deleteFile(Id contentDocumentId)
+```
+
+Backs `c-file-upload-manager`. Reads/deletes `ContentDocument`/`ContentDocumentLink` under `AccessLevel.USER_MODE`/`WITH USER_MODE`; uploading itself is handled by the platform's `lightning-file-upload` base component, not this class.
+
 ---
 
 ## Running the tests
 
 ```bash
 npm install
-npm test             # Jest — 125 tests across every LWC/util module
+npm test             # Jest — 190 tests across every LWC/util module
 npm run lint          # ESLint
 ```
 
-Apex tests (`*Test.cls`, 22 methods) run in your org:
+Apex tests (`*Test.cls`, 24 methods) run in your org:
 
 ```bash
 sf apex run test -o lwc-toolkit -c -r human

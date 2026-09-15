@@ -1,0 +1,29 @@
+<template>
+    <div class="gallery-grid" style={gridStyle}>
+        <template for:each={images} for:index="idx" for:item="image">
+            <button
+                key={image.url}
+                type="button"
+                class="gallery-thumb"
+                data-index={idx}
+                onclick={handleThumbnailClick}
+                title={image.title}
+            >
+                <img src={image.url} alt={image.title} />
+            </button>
+        </template>
+    </div>
+
+    <c-modal header-label={activeImageTitle} size="large" onclose={handleClose}>
+        <template if:true={activeImage}>
+            <div class="lightbox-body">
+                <img src={activeImage.url} alt={activeImage.title} class="lightbox-image" />
+            </div>
+            <div slot="footer" class="lightbox-footer">
+                <lightning-button label="Previous" onclick={handlePrevious} disabled={isFirstImage}></lightning-button>
+                <span class="slds-text-body_small slds-text-color_weak">{counterLabel}</span>
+                <lightning-button label="Next" onclick={handleNext} disabled={isLastImage}></lightning-button>
+            </div>
+        </template>
+    </c-modal>
+</template>

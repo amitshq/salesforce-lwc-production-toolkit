@@ -14,12 +14,14 @@
   <div class="wrap nav">
     <a class="brand" href="#top">⚡ salesforce-lwc-production-toolkit</a>
     <nav class="links">
-      <a href="#components">Components</a>
       <a href="#flagship">Flagship</a>
+      <a href="#demo">Live demo</a>
+      <a href="#components">Components</a>
       <a href="#start">Getting started</a>
       <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Usage guide</a>
       <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit">GitHub</a>
     </nav>
+    <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
   </div>
 </header>
 
@@ -38,6 +40,7 @@
       </p>
       <div class="cta-row">
         <a class="btn primary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit">View on GitHub</a>
+        <a class="btn secondary" href="#demo">Try the live demo</a>
         <a class="btn secondary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Read the usage guide</a>
       </div>
     </div>
@@ -92,46 +95,55 @@
     </div>
   </section>
 
+  <section id="demo">
+    <div class="wrap">
+      <h2>Try it: a live mock of the pipeline</h2>
+      <p class="section-lead">
+        Fake data, runs entirely in your browser &mdash; no org required. This mirrors what
+        <code>c-enterprise-datatable</code> + <code>GenericDmlService</code> do server-side: click a column to sort, search,
+        select rows for a bulk delete, or <strong>double-click a cell to edit</strong> (the "Globex Industries" row is wired to
+        always fail on save, so you can see the partial-error path).
+      </p>
+      <div class="demo-card">
+        <div class="demo-toolbar">
+          <input type="search" id="demoSearch" placeholder="Search name or industry..." aria-label="Search demo data" />
+          <div class="demo-toolbar-actions">
+            <button type="button" class="btn secondary small" id="demoRefresh">&#8635; Refresh</button>
+          </div>
+        </div>
+        <div class="demo-table-wrap">
+          <table class="demo-table" id="demoTable">
+            <thead><tr id="demoHeadRow"></tr></thead>
+            <tbody id="demoBody"></tbody>
+          </table>
+        </div>
+        <div class="demo-bulkbar" id="demoBulkBar" hidden></div>
+        <div class="demo-pagination">
+          <button type="button" class="btn secondary small" id="demoPrev">Previous</button>
+          <span id="demoPageStatus"></span>
+          <button type="button" class="btn secondary small" id="demoNext">Next</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="components">
     <div class="wrap">
-      <h2>What's inside</h2>
-      <p class="section-lead">Reusable pieces, usable independently of the datatable.</p>
-
-      <div class="cat-heading">Data components</div>
-      <div class="grid">
-        <div class="card"><h3>Enterprise Datatable</h3><p>The full server-side pipeline above.</p><code class="path">lwc/enterpriseDatatable</code></div>
-        <div class="card"><h3>Infinite Scroll Loader</h3><p>IntersectionObserver-based "load more" sentinel for any list.</p><code class="path">lwc/infiniteScrollLoader</code></div>
-        <div class="card"><h3>Bulk Action Bar</h3><p>"N selected" toolbar with your own action buttons.</p><code class="path">lwc/bulkActionBar</code></div>
+      <h2>Explore every piece</h2>
+      <p class="section-lead">Search or filter, then click any card for the full usage: imports, props, events, and methods.</p>
+      <div class="catalog-controls">
+        <input type="search" id="catalogSearch" placeholder="Search components, utilities, Apex services..." aria-label="Search catalog" />
+        <div class="filter-pills" id="filterPills">
+          <button type="button" class="pill active" data-filter="all">All</button>
+          <button type="button" class="pill" data-filter="Data components">Data components</button>
+          <button type="button" class="pill" data-filter="UX components">UX components</button>
+          <button type="button" class="pill" data-filter="Data utilities">Data utilities</button>
+          <button type="button" class="pill" data-filter="Salesforce utilities">Salesforce utilities</button>
+          <button type="button" class="pill" data-filter="Apex services">Apex services</button>
+        </div>
       </div>
-
-      <div class="cat-heading">UX components</div>
-      <div class="grid">
-        <div class="card"><h3>Modal</h3><p>Slot-based, focus-trapped modal framework. Works in Experience Cloud/LWR too.</p><code class="path">lwc/modal</code></div>
-        <div class="card"><h3>Confirm Dialog</h3><p>Promise-based confirmation dialog built on <code>lightning/modal</code>.</p><code class="path">lwc/confirmDialog</code></div>
-        <div class="card"><h3>State Manager</h3><p>One component for the loading/error/empty/content branch.</p><code class="path">lwc/stateManager</code></div>
-        <div class="card"><h3>Empty State</h3><p>Presentational "no data" placeholder with an actions slot.</p><code class="path">lwc/emptyState</code></div>
-        <div class="card"><h3>Error State</h3><p>Retry button + collapsible raw error details.</p><code class="path">lwc/errorState</code></div>
-        <div class="card"><h3>Wizard</h3><p>Multi-step flow with cancelable per-step validation.</p><code class="path">lwc/wizard</code></div>
-      </div>
-
-      <div class="cat-heading">Data utilities</div>
-      <div class="grid">
-        <div class="card"><h3>functionUtils</h3><p>Debounce and throttle.</p><code class="path">lwc/functionUtils</code></div>
-        <div class="card"><h3>objectUtils</h3><p>Deep clone, deep equality, nested-path get/set.</p><code class="path">lwc/objectUtils</code></div>
-        <div class="card"><h3>jsonUtils</h3><p>Parse/stringify/pretty-print that never throws.</p><code class="path">lwc/jsonUtils</code></div>
-        <div class="card"><h3>urlUtils</h3><p>Query-string parse/build/read/update.</p><code class="path">lwc/urlUtils</code></div>
-      </div>
-
-      <div class="cat-heading">Salesforce utilities</div>
-      <div class="grid">
-        <div class="card"><h3>apexErrorUtils</h3><p>Turns imperative Apex call errors into plain messages.</p><code class="path">lwc/apexErrorUtils</code></div>
-        <div class="card"><h3>ldsErrorUtils</h3><p>Same, for Lightning Data Service/UI API errors.</p><code class="path">lwc/ldsErrorUtils</code></div>
-        <div class="card"><h3>navigationUtils</h3><p>NavigationMixin boilerplate wrapped in plain functions.</p><code class="path">lwc/navigationUtils</code></div>
-        <div class="card"><h3>recordUtils</h3><p>Pairs <code>refreshApex</code> with <code>notifyRecordUpdateAvailable</code>.</p><code class="path">lwc/recordUtils</code></div>
-        <div class="card"><h3>permissionUtils</h3><p>Cached client wrapper over <code>PermissionService.cls</code>.</p><code class="path">lwc/permissionUtils</code></div>
-        <div class="card"><h3>metadataUtils</h3><p>Cached client wrapper over <code>CustomMetadataService.cls</code>.</p><code class="path">lwc/metadataUtils</code></div>
-        <div class="card"><h3>toastService</h3><p>Consistent <code>ShowToastEvent</code> dispatch with de-duplication.</p><code class="path">lwc/toastService</code></div>
-      </div>
+      <p id="catalogEmpty" class="section-lead" hidden>No matches. Try a different search term.</p>
+      <div class="grid" id="catalogGrid"></div>
     </div>
   </section>
 
@@ -160,5 +172,15 @@ sf org open -o lwc-toolkit</code></pre>
   </div>
 </footer>
 
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <button type="button" class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<script src="app.js"></script>
 </body>
 </html>
