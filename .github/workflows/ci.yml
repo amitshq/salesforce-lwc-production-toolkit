@@ -27,3 +27,5 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      # The website's release timer and catalog: dates, links, and that every component and Apex service is listed.
+      - run: npm run test:site

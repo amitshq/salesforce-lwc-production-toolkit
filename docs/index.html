@@ -10,10 +10,26 @@
 </head>
 <body>
 
+<aside class="whats-new-banner" id="whatsNewBanner" role="region" aria-label="What's new" hidden>
+  <div class="wrap wn-inner">
+    <span class="wn-badge">New</span>
+    <div class="wn-main">
+      <p class="wn-title"><strong id="wnTitle"></strong> <span class="wn-age" id="wnAge"></span></p>
+      <ul class="wn-chips" id="wnChips"></ul>
+    </div>
+    <p class="wn-next" id="wnNext" hidden><span id="wnNextLabel"></span> <span class="wn-clock" id="wnNextClock" role="timer"></span></p>
+    <div class="wn-actions">
+      <a class="btn small primary" href="#whats-new">See what's new</a>
+      <button type="button" class="wn-close" id="wnClose" aria-label="Dismiss this announcement">&times;</button>
+    </div>
+  </div>
+</aside>
+
 <header class="site">
   <div class="wrap nav">
     <a class="brand" href="#top">⚡ salesforce-lwc-production-toolkit</a>
     <nav class="links">
+      <a href="#whats-new">What's new</a>
       <a href="#flagship">Flagship</a>
       <a href="#demo">Live demo</a>
       <a href="#components">Components</a>
@@ -30,7 +46,7 @@
     <div class="wrap">
       <div class="badges">
         <img src="https://img.shields.io/badge/API-61.0%2B-0b5cff" alt="API version 61.0+" />
-        <img src="https://img.shields.io/badge/tests-220%20passing-2ea043" alt="220 tests passing" />
+        <img src="https://img.shields.io/badge/tests-374%20passing-2ea043" alt="374 tests passing" />
         <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT license" />
       </div>
       <h1>Stop rebuilding the same enterprise LWC components on every project.</h1>
@@ -43,6 +59,18 @@
         <a class="btn secondary" href="#demo">Try the live demo</a>
         <a class="btn secondary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Read the usage guide</a>
       </div>
+    </div>
+  </section>
+
+  <section id="whats-new">
+    <div class="wrap">
+      <h2 id="wnSectionTitle">What's new</h2>
+      <p class="section-lead" id="wnSectionLead"></p>
+      <div class="grid" id="wnFeatures"></div>
+
+      <h3 class="wn-subhead">Release timeline</h3>
+      <ol class="timeline" id="releaseTimeline"></ol>
+      <p class="wn-footnote" id="wnFootnote"></p>
     </div>
   </section>
 
@@ -82,12 +110,22 @@
     bulk-actions={bulkActions}
     enable-row-selection
     enable-bulk-delete
+    enable-conflict-detection
+    enable-column-chooser
+    view-key="accounts-main"
+    auto-refresh
     default-sort-field="Name"
     onbulkaction={handleBulkAction}
 &gt;&lt;/c-enterprise-datatable&gt;</code></pre>
       <p>
-        Backed by four generic Apex services &mdash; <code>GenericQueryService</code>, <code>GenericDmlService</code>,
-        <code>PermissionService</code>, <code>CustomMetadataService</code> &mdash; instead of a bespoke controller per object.
+        New in v2: <strong>conflict-safe saves</strong> (<code>enable-conflict-detection</code>), a
+        <strong>column chooser</strong>, per-user <strong>saved views</strong> (<code>view-key</code>) and
+        <strong>live refresh</strong> (<code>auto-refresh</code>), next to the CSV import wizard and aggregate KPI cards.
+      </p>
+      <p>
+        Backed by generic Apex services &mdash; <code>GenericQueryService</code>, <code>GenericDmlService</code>,
+        <code>GenericAggregateService</code>, <code>SavedViewService</code>, <code>PermissionService</code>,
+        <code>CustomMetadataService</code> &mdash; instead of a bespoke controller per object.
         Identifiers (object/field names) are validated against the running user's schema describe; values are always bound
         via <code>Database.queryWithBinds</code>, never concatenated. See the
         <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md#enterprise-datatable">usage guide</a> for the full column/API reference.
@@ -102,9 +140,11 @@
         Fake data, runs entirely in your browser &mdash; no org required. This mirrors what
         <code>c-enterprise-datatable</code> + <code>GenericDmlService</code> do server-side: click a column to sort, search,
         select rows for a bulk delete, or <strong>double-click a cell to edit</strong> (the "Globex Industries" row is wired to
-        always fail on save, so you can see the partial-error path).
+        always fail on save, so you can see the partial-error path). The tiles on top recompute as you search or delete,
+        like <code>c-aggregate-kpi-card</code> does server-side.
       </p>
       <div class="demo-card">
+        <div class="demo-kpis" id="demoKpis" aria-live="polite"></div>
         <div class="demo-toolbar">
           <input type="search" id="demoSearch" placeholder="Search name or industry..." aria-label="Search demo data" />
           <div class="demo-toolbar-actions">
@@ -168,6 +208,8 @@ sf org open -o lwc-toolkit</code></pre>
       <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/README.md">README</a>
       &middot;
       <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Usage guide</a>
+      &middot;
+      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/CHANGELOG.md">Changelog</a>
     </p>
   </div>
 </footer>
@@ -181,6 +223,9 @@ sf org open -o lwc-toolkit</code></pre>
 
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
+<script src="catalog.js"></script>
+<script src="releases.js"></script>
+<script src="release-timer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

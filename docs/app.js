@@ -97,403 +97,7 @@ wrapCodeBlocksWithCopyButtons(document);
 /* =========================================================================
    4. COMPONENT / UTILITY / APEX CATALOG
    ========================================================================= */
-const CATALOG = [
-  {
-    id: 'enterprise-datatable',
-    name: 'c-enterprise-datatable',
-    category: 'Data components',
-    kind: 'LWC',
-    path: 'lwc/enterpriseDatatable',
-    tagline: 'The flagship: server-side query, pagination, sorting, filtering, inline edit, bulk actions, and partial-error reporting for any object.',
-    usage:
-      '<c-enterprise-datatable\n    object-api-name="Account"\n    title="Accounts"\n    columns={columns}\n    page-size="25"\n    pagination-mode="pages"\n    search-fields={searchFields}\n    bulk-actions={bulkActions}\n    enable-row-selection\n    enable-bulk-delete\n    default-sort-field="Name"\n    onbulkaction={handleBulkAction}\n></c-enterprise-datatable>',
-    api: [
-      ['objectApiName', 'String', '— (required)', 'The sObject to query, e.g. \'Account\'.'],
-      ['columns', 'Array', '[]', 'Standard lightning-datatable columns, plus filterable/filterOperator.'],
-      ['pageSize', 'Number', '25', 'Rows per page/batch.'],
-      ['paginationMode', 'String', "'pages'", "'pages' or 'infinite'."],
-      ['searchFields', 'Array<String>', '[]', 'Fields the global search box searches.'],
-      ['staticFilters', 'Array', '[]', 'Always-applied filters: [{ fieldName, operatorName, value }].'],
-      ['enableRowSelection', 'Boolean', 'false', 'Shows the checkbox column + bulk action bar.'],
-      ['enableBulkDelete', 'Boolean', 'false', "Built-in 'Delete' bulk action, gated on CRUD + confirmation."]
-    ],
-    events: [['bulkaction', '{ name, selectedRows }', 'A bulkActions entry (not the built-in delete) was clicked.']],
-    methods: [['refresh()', 'Promise<void>', 'Re-runs the current query; clears selection/in-progress edits.']]
-  },
-  {
-    id: 'infinite-scroll-loader',
-    name: 'c-infinite-scroll-loader',
-    category: 'Data components',
-    kind: 'LWC',
-    path: 'lwc/infiniteScrollLoader',
-    tagline: 'IntersectionObserver-based "load more" sentinel, reusable for any list or grid.',
-    usage:
-      '<template for:each={rows} for:item="row"> ... </template>\n<c-infinite-scroll-loader\n    is-loading={isLoadingMore}\n    disabled={allRowsLoaded}\n    onloadmore={handleLoadMore}\n></c-infinite-scroll-loader>',
-    api: [
-      ['isLoading', 'Boolean', 'false', 'Shows a small spinner; suppresses further loadmore events.'],
-      ['disabled', 'Boolean', 'false', 'Set true once there is nothing left to load.'],
-      ['rootMargin', 'String', "'100px'", 'How far before the sentinel is visible that it fires.']
-    ],
-    events: [['loadmore', '(none)', 'The sentinel scrolled into view and more can be fetched.']]
-  },
-  {
-    id: 'bulk-action-bar',
-    name: 'c-bulk-action-bar',
-    category: 'Data components',
-    kind: 'LWC',
-    path: 'lwc/bulkActionBar',
-    tagline: '"N selected" toolbar for any multi-select list, independent of the datatable.',
-    usage:
-      '<c-bulk-action-bar\n    selected-count={selectedRows.length}\n    actions={bulkActions}\n    onaction={handleBulkAction}\n    onclear={handleClearSelection}\n></c-bulk-action-bar>',
-    api: [
-      ['selectedCount', 'Number', '0', 'Renders nothing when 0.'],
-      ['actions', 'Array', '[]', '[{ name, label, variant, iconName, disabled }]']
-    ],
-    events: [
-      ['action', '{ name, selectedCount }', 'An action button was clicked.'],
-      ['clear', '(none)', 'The clear-selection button was clicked.']
-    ]
-  },
-  {
-    id: 'modal',
-    name: 'c-modal',
-    category: 'UX components',
-    kind: 'LWC',
-    path: 'lwc/modal',
-    tagline: 'Declarative, slot-based modal framework for content authored inline in a template. Works in Experience Cloud/LWR too.',
-    usage:
-      '<c-modal header-label="Edit Contact" onclose={handleClose}>\n    <div class="slds-p-around_medium">... body ...</div>\n    <div slot="footer">\n        <lightning-button label="Cancel" onclick={handleCancel}></lightning-button>\n        <lightning-button label="Save" variant="brand" onclick={handleSave}></lightning-button>\n    </div>\n</c-modal>\n\n// imperatively:\nthis.template.querySelector(\'c-modal\').open();',
-    api: [
-      ['headerLabel', 'String', "''", 'Modal header text.'],
-      ['size', 'String', "'medium'", "'small' | 'medium' | 'large' | 'full'"],
-      ['preventCloseOnBackdropClick', 'Boolean', 'false', 'Disable closing on backdrop click.'],
-      ['hideCloseButton', 'Boolean', 'false', 'Hides the header X button.']
-    ],
-    methods: [
-      ['open()', 'void', 'Opens the modal, traps focus.'],
-      ['close()', 'void', 'Closes the modal, restores focus.']
-    ],
-    events: [['close', '(none)', 'Dispatched after the modal closes, any way it closed.']]
-  },
-  {
-    id: 'confirm-dialog',
-    name: 'c-confirm-dialog',
-    category: 'UX components',
-    kind: 'LWC',
-    path: 'lwc/confirmDialog',
-    tagline: 'Promise-based confirmation dialog built on the platform lightning/modal service.',
-    usage:
-      "import ConfirmDialog from 'c/confirmDialog';\n\nasync handleDelete() {\n    const confirmed = await ConfirmDialog.open({\n        label: 'Delete Records',\n        message: 'This will permanently delete 3 records.',\n        variant: 'destructive',\n        confirmLabel: 'Delete'\n    });\n    if (confirmed) { /* proceed */ }\n}",
-    api: [
-      ['label', 'String', "'Confirm'", 'Dialog header.'],
-      ['message', 'String', "'Are you sure?'", 'Body text.'],
-      ['variant', 'String', "'neutral'", "'neutral' or 'destructive'."],
-      ['confirmLabel', 'String', "'Confirm'", ''],
-      ['cancelLabel', 'String', "'Cancel'", '']
-    ],
-    methods: [['ConfirmDialog.open(options)', 'Promise<Boolean>', 'Resolves true (confirmed) or false (canceled/dismissed).']]
-  },
-  {
-    id: 'state-manager',
-    name: 'c-state-manager',
-    category: 'UX components',
-    kind: 'LWC',
-    path: 'lwc/stateManager',
-    tagline: "The loading/error/empty/content branch, so you don't write it by hand in every component.",
-    usage:
-      '<c-state-manager\n    is-loading={isLoading}\n    has-error={hasError}\n    error-message={errorMessage}\n    is-empty={isEmpty}\n    empty-title="No records found"\n>\n    <template for:each={rows} for:item="row">...</template>\n</c-state-manager>',
-    api: [
-      ['isLoading', 'Boolean', 'false', 'Shows the loading slot.'],
-      ['hasError', 'Boolean', 'false', 'Shows the error slot.'],
-      ['errorMessage', 'String', "''", 'Passed to the default c-error-state.'],
-      ['isEmpty', 'Boolean', 'false', 'Shows the empty slot.']
-    ]
-  },
-  {
-    id: 'empty-state',
-    name: 'c-empty-state',
-    category: 'UX components',
-    kind: 'LWC',
-    path: 'lwc/emptyState',
-    tagline: 'Presentational "no data" placeholder with an actions slot, used standalone or via c-state-manager.',
-    usage:
-      '<c-empty-state title="No accounts yet" message="Create your first account." icon-name="utility:add">\n    <lightning-button slot="actions" label="New Account" variant="brand"></lightning-button>\n</c-empty-state>',
-    api: [
-      ['title', 'String', "'Nothing to show'", ''],
-      ['message', 'String', "''", ''],
-      ['iconName', 'String', "'utility:open_folder'", '']
-    ]
-  },
-  {
-    id: 'error-state',
-    name: 'c-error-state',
-    category: 'UX components',
-    kind: 'LWC',
-    path: 'lwc/errorState',
-    tagline: 'Presentational error placeholder with a retry button and collapsible raw-error details.',
-    usage: '<c-error-state message={errorMessage} details={rawErrorJson} onretry={handleRetry}></c-error-state>',
-    api: [
-      ['title', 'String', "'Something went wrong'", ''],
-      ['message', 'String', "''", ''],
-      ['hideRetry', 'Boolean', 'false', 'Hides the retry button.'],
-      ['details', 'String', "''", 'Raw error text, shown behind a toggle.']
-    ],
-    events: [['retry', '(none)', 'The retry button was clicked.']]
-  },
-  {
-    id: 'wizard',
-    name: 'c-wizard',
-    category: 'UX components',
-    kind: 'LWC',
-    path: 'lwc/wizard',
-    tagline: 'Multi-step flow with a progress indicator and cancelable per-step validation.',
-    usage:
-      '<c-wizard steps={steps} onbeforestepchange={handleBeforeStepChange} onfinish={handleFinish}>\n    <div data-step="details">... step 1 ...</div>\n    <div data-step="review">... step 2 ...</div>\n</c-wizard>',
-    api: [['steps', 'Array', '[]', '[{ label, value }]'],
-      ['hideNavigation', 'Boolean', 'false', 'Hides the built-in Back/Next/Finish buttons.']],
-    methods: [
-      ['next()', 'Boolean', 'Advances one step.'],
-      ['back()', 'Boolean', 'Goes back one step.'],
-      ['goToStep(value)', 'Boolean', 'Jumps to a named step.']
-    ],
-    events: [
-      ['beforestepchange', '{ fromValue, toValue }', 'Cancelable - call event.preventDefault() to block advancing.'],
-      ['stepchange', '{ value, index }', 'After a transition completes.'],
-      ['finish', '{ value }', 'Finish clicked on the last step.']
-    ]
-  },
-  {
-    id: 'function-utils',
-    name: 'functionUtils',
-    category: 'Data utilities',
-    kind: 'JS module',
-    path: 'lwc/functionUtils',
-    tagline: 'Debounce and throttle for search-as-you-type, scroll, and resize handlers.',
-    usage: "import { debounce, throttle } from 'c/functionUtils';\n\nconst debounced = debounce(() => this.runSearch(), 300);",
-    functions: [
-      ['debounce(fn, waitMs = 300)', 'Delays fn until waitMs pass with no further calls. Returned fn has .cancel().'],
-      ['throttle(fn, waitMs = 300)', 'Calls fn at most once per waitMs (leading + trailing edge).']
-    ]
-  },
-  {
-    id: 'object-utils',
-    name: 'objectUtils',
-    category: 'Data utilities',
-    kind: 'JS module',
-    path: 'lwc/objectUtils',
-    tagline: 'Deep clone, deep equality, and safe nested-path access for plain data.',
-    usage: "import { deepClone, isEqual, getNestedValue, setNestedValue } from 'c/objectUtils';",
-    functions: [
-      ['deepClone(value)', 'Recursively clones objects/arrays/Date/Map/Set.'],
-      ['isEqual(a, b)', 'Deep equality for objects, arrays, Dates, primitives.'],
-      ['getNestedValue(obj, path, defaultValue?)', "Reads 'a.b[0].c' without throwing on a missing segment."],
-      ['setNestedValue(obj, path, value)', 'Returns a new object with value set at path (immutable).']
-    ]
-  },
-  {
-    id: 'csv-utils',
-    name: 'csvUtils',
-    category: 'Data utilities',
-    kind: 'JS module',
-    path: 'lwc/csvUtils',
-    tagline: 'RFC 4180 CSV build + browser download for datatable / bulk-action exports.',
-    usage:
-      "import { exportRowsToCsv } from 'c/csvUtils';\n\nexportRowsToCsv(selectedRows, this.columns, 'accounts-export.csv');",
-    functions: [
-      ['escapeCsvValue(value)', 'Quotes fields that contain commas, quotes, or newlines; Dates become ISO strings, arrays join with "; ".'],
-      ['neutralizeFormula(value)', "Prefixes text starting with = + - @ with a quote so spreadsheets don't run it as a formula."],
-      ['rowsToCsv(rows, columns, options?)', 'CRLF-separated CSV from rows + datatable-style columns; skips action columns, reads nested relationships.'],
-      ['downloadCsv(filename, csvContent)', 'Triggers a browser download, with a UTF-8 BOM so Excel reads non-ASCII text.'],
-      ['exportRowsToCsv(rows, columns, filename?, options?)', 'rowsToCsv + downloadCsv; returns the CSV content.']
-    ]
-  },
-  {
-    id: 'json-utils',
-    name: 'jsonUtils',
-    category: 'Data utilities',
-    kind: 'JS module',
-    path: 'lwc/jsonUtils',
-    tagline: "JSON helpers that don't throw - handy for debug panels and malformed payloads.",
-    usage: "import { safeParse, safeStringify, prettyPrint, isValidJson } from 'c/jsonUtils';",
-    functions: [
-      ['safeParse(jsonString, fallback = null)', 'JSON.parse that returns fallback instead of throwing.'],
-      ['safeStringify(value, fallback = "", indent?)', 'JSON.stringify that returns fallback instead of throwing.'],
-      ['prettyPrint(value, indent = 2)', "Accepts a JSON string or JS value; returns indented JSON."],
-      ['isValidJson(value)', 'Boolean check.']
-    ]
-  },
-  {
-    id: 'url-utils',
-    name: 'urlUtils',
-    category: 'Data utilities',
-    kind: 'JS module',
-    path: 'lwc/urlUtils',
-    tagline: 'Query-string parse/build/read/update helpers built on URLSearchParams/URL.',
-    usage: "import { parseQueryParams, buildQueryString, withQueryParam } from 'c/urlUtils';",
-    functions: [
-      ['parseQueryParams(search?)', 'Repeated keys become arrays.'],
-      ['buildQueryString(params)', "Returns '?a=1&b=2' or ''."],
-      ['getQueryParam(name, search?)', 'Reads a single param.'],
-      ['withQueryParam(url, name, value)', 'Returns a new URL string with name set.'],
-      ['removeQueryParam(url, name)', 'Returns a new URL string with name removed.']
-    ]
-  },
-  {
-    id: 'apex-error-utils',
-    name: 'apexErrorUtils',
-    category: 'Salesforce utilities',
-    kind: 'JS module',
-    path: 'lwc/apexErrorUtils',
-    tagline: 'Turns errors from an imperative @salesforce/apex call (or @wire to Apex) into plain messages.',
-    usage: "import { reduceApexErrors } from 'c/apexErrorUtils';\n\ntry {\n    await saveRecords({ objectApiName, records });\n} catch (error) {\n    const messages = reduceApexErrors(error);\n}",
-    functions: [
-      ['reduceApexErrors(errors)', "String[] - de-duplicated messages, worst case ['Unknown error']."],
-      ['reduceApexErrorMessage(errors, separator = ", ")', 'Joined string.']
-    ]
-  },
-  {
-    id: 'lds-error-utils',
-    name: 'ldsErrorUtils',
-    category: 'Salesforce utilities',
-    kind: 'JS module',
-    path: 'lwc/ldsErrorUtils',
-    tagline: 'Same idea as apexErrorUtils, for Lightning Data Service / UI API errors (different shape).',
-    usage: "import { reduceLdsErrors } from 'c/ldsErrorUtils';",
-    functions: [
-      ['reduceLdsErrors(errors)', 'String[] from getRecord/createRecord/updateRecord/deleteRecord failures.'],
-      ['reduceLdsErrorMessage(errors, separator = ", ")', 'Joined string.']
-    ]
-  },
-  {
-    id: 'navigation-utils',
-    name: 'navigationUtils',
-    category: 'Salesforce utilities',
-    kind: 'JS module',
-    path: 'lwc/navigationUtils',
-    tagline: 'NavigationMixin boilerplate wrapped in plain functions - pass the component as the first argument.',
-    usage:
-      "import { NavigationMixin } from 'lightning/navigation';\nimport { navigateToRecord } from 'c/navigationUtils';\n\nexport default class MyCmp extends NavigationMixin(LightningElement) {\n    openAccount(id) {\n        navigateToRecord(this, id, 'Account');\n    }\n}",
-    functions: [
-      ['navigateToRecord(cmp, recordId, objectApiName, actionName?)', ''],
-      ['navigateToNewRecord(cmp, objectApiName, defaultFieldValues?)', ''],
-      ['navigateToObjectHome(cmp, objectApiName)', ''],
-      ['navigateToListView(cmp, objectApiName, listViewApiName)', ''],
-      ['navigateToRelatedList(cmp, recordId, objectApiName, relationshipApiName)', ''],
-      ['generateRecordUrl(cmp, recordId, objectApiName, actionName?)', 'Promise<String> href, no navigation.']
-    ]
-  },
-  {
-    id: 'record-utils',
-    name: 'recordUtils',
-    category: 'Salesforce utilities',
-    kind: 'JS module',
-    path: 'lwc/recordUtils',
-    tagline: 'Pairs refreshApex with notifyRecordUpdateAvailable in one call after a DML that bypassed LDS.',
-    usage: "import { refreshRecords } from 'c/recordUtils';\n\nawait refreshRecords(this.wiredAccounts, savedRecordIds);",
-    functions: [
-      ['refreshRecords(wiredResult?, recordIds?)', 'Runs refreshApex and/or notifyRecordsChanged.'],
-      ['notifyRecordsChanged(recordIds)', 'Accepts a single Id, an array, or {recordId} objects.'],
-      ['normalizeRecordIds(recordIds)', 'The shape-normalizer, exported directly.']
-    ]
-  },
-  {
-    id: 'permission-utils',
-    name: 'permissionUtils',
-    category: 'Salesforce utilities',
-    kind: 'JS module',
-    path: 'lwc/permissionUtils',
-    tagline: 'Session-memoized client wrapper over PermissionService.cls.',
-    usage: "import { getObjectAccess, hasCustomPermission } from 'c/permissionUtils';\n\nconst access = await getObjectAccess('Account');\nconst canBulkEdit = await hasCustomPermission('Toolkit_Bulk_Edit');",
-    functions: [
-      ['getObjectAccess(objectApiName)', 'Promise<{isAccessible, isCreateable, isUpdateable, isDeletable}>'],
-      ['getFieldAccess(objectApiName, fieldNames)', 'Promise<Array<{fieldName, readable, editable}>>'],
-      ['hasCustomPermission(developerName)', 'Promise<Boolean>'],
-      ['clearPermissionCache()', 'Clears every cached result.']
-    ]
-  },
-  {
-    id: 'metadata-utils',
-    name: 'metadataUtils',
-    category: 'Salesforce utilities',
-    kind: 'JS module',
-    path: 'lwc/metadataUtils',
-    tagline: 'Session-cached client wrapper over CustomMetadataService.cls.',
-    usage: "import { getMetadataRecordByDeveloperName } from 'c/metadataUtils';\n\nconst record = await getMetadataRecordByDeveloperName('ToolkitDemoSetting__mdt', 'Default', ['DefaultPageSize__c']);",
-    functions: [
-      ['getMetadataRecords(metadataApiName, fieldNames = [])', 'Promise<Array<Object>>'],
-      ['getMetadataRecordByDeveloperName(metadataApiName, developerName, fieldNames = [])', 'Promise<Object|null>'],
-      ['clearMetadataCache()', '']
-    ]
-  },
-  {
-    id: 'toast-service',
-    name: 'toastService',
-    category: 'Salesforce utilities',
-    kind: 'JS module',
-    path: 'lwc/toastService',
-    tagline: 'Consistent ShowToastEvent dispatch with de-duplication (suppresses an identical toast fired twice within 3s).',
-    usage: "import { showSuccessToast, showErrorToast } from 'c/toastService';\n\nshowSuccessToast(this, 'Record saved.');\nshowErrorToast(this, reduceApexErrors(error));",
-    functions: [
-      ['showToast(cmp, { title, message, variant, mode, allowDuplicate })', ''],
-      ['showSuccessToast(cmp, message, title?)', ''],
-      ['showErrorToast(cmp, messageOrMessages, title?)', 'Accepts a string or string[].'],
-      ['clearToastDedupeState()', '']
-    ]
-  },
-  {
-    id: 'generic-query-service',
-    name: 'GenericQueryService.cls',
-    category: 'Apex services',
-    kind: 'Apex',
-    path: 'classes/GenericQueryService.cls',
-    tagline: 'Schema-driven dynamic SOQL: pagination, sorting, filtering, and search for any object - no bespoke controller.',
-    usage:
-      '@AuraEnabled(cacheable=true)\npublic static QueryResult query(\n    String objectApiName, List<String> fields, List<QueryFilter> filters,\n    String sortField, String sortDirection, String searchTerm, List<String> searchFields,\n    Integer pageNumber, Integer pageSize\n)',
-    methods: [
-      ['Returns', 'QueryResult', '{ records, totalCount, pageNumber, pageSize, hasMore }'],
-      ['Security', '—', 'Identifiers validated against schema describes; values bound via Database.queryWithBinds; runs under AccessLevel.USER_MODE.']
-    ]
-  },
-  {
-    id: 'generic-dml-service',
-    name: 'GenericDmlService.cls',
-    category: 'Apex services',
-    kind: 'Apex',
-    path: 'classes/GenericDmlService.cls',
-    tagline: 'Bulk insert/update/delete with allOrNone=false and a per-row result, so one bad row never blocks the batch.',
-    usage:
-      '@AuraEnabled\npublic static List<DmlResult> saveRecords(String objectApiName, List<DmlRecordInput> records)\n\n@AuraEnabled\npublic static List<DmlResult> deleteRecords(String objectApiName, List<String> recordIds)',
-    methods: [
-      ['DmlRecordInput', '{ rowKey, fields }', 'fields is a map of API name to value; include Id to update, omit to insert.'],
-      ['DmlResult', '{ rowKey, recordId, success, message, fieldNames }', 'One per input row.'],
-      ['Security', '—', 'FLS enforced via Security.stripInaccessible before every insert/update.']
-    ]
-  },
-  {
-    id: 'permission-service-apex',
-    name: 'PermissionService.cls',
-    category: 'Apex services',
-    kind: 'Apex',
-    path: 'classes/PermissionService.cls',
-    tagline: "Object/field/custom-permission checks, backing permissionUtils.js.",
-    usage:
-      '@AuraEnabled(cacheable=true)\npublic static Map<String, Boolean> checkObjectAccess(String objectApiName)\n\n@AuraEnabled(cacheable=true)\npublic static Boolean hasCustomPermission(String developerName)',
-    methods: [
-      ['hasCustomPermission', 'Boolean', 'Checks both Permission Set/Group assignments and permissions granted directly on the Profile.']
-    ]
-  },
-  {
-    id: 'custom-metadata-service-apex',
-    name: 'CustomMetadataService.cls',
-    category: 'Apex services',
-    kind: 'Apex',
-    path: 'classes/CustomMetadataService.cls',
-    tagline: 'Generic Custom Metadata Type reader, backing metadataUtils.js.',
-    usage:
-      '@AuraEnabled(cacheable=true)\npublic static List<SObject> getRecords(String metadataApiName, List<String> fieldNames)',
-    methods: [['Validation', '—', 'metadataApiName must end in __mdt; unknown/inaccessible fields are silently dropped.']]
-  }
-];
+const CATALOG = window.TOOLKIT_CATALOG; // defined in catalog.js
 
 /* ---- render the catalog grid ---- */
 const grid = document.getElementById('catalogGrid');
@@ -695,9 +299,23 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
   const nextBtn = document.getElementById('demoNext');
   const searchBox = document.getElementById('demoSearch');
   const refreshBtn = document.getElementById('demoRefresh');
+  const kpis = document.getElementById('demoKpis');
 
   function currencyFormat(value) {
     return '$' + Number(value).toLocaleString('en-US');
+  }
+
+  // What c-aggregate-kpi-card does server-side through GenericAggregateService: COUNT / SUM / AVG over the filtered rows.
+  function renderKpis(list) {
+    const total = list.reduce((sum, row) => sum + row.revenue, 0);
+    const tiles = [
+      ['Accounts', String(list.length)],
+      ['Total revenue', currencyFormat(total)],
+      ['Average revenue', list.length ? currencyFormat(Math.round(total / list.length)) : '—']
+    ];
+    kpis.innerHTML = tiles
+      .map(([label, value]) => `<div class="demo-kpi"><span class="demo-kpi-label">${label}</span><strong>${value}</strong></div>`)
+      .join('');
   }
 
   function getFiltered() {
@@ -728,6 +346,7 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
   function render() {
     renderHead();
     const filtered = getFiltered();
+    renderKpis(filtered);
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     if (page > totalPages) page = totalPages;
     const start = (page - 1) * PAGE_SIZE;
@@ -900,3 +519,162 @@ if (window.location.hash) {
     requestAnimationFrame(() => target.scrollIntoView());
   }
 }
+
+/* =========================================================================
+   8. WHAT'S NEW - banner, feature cards and release timeline, driven by releases.js
+   ========================================================================= */
+(function whatsNew() {
+  const releases = window.TOOLKIT_RELEASES;
+  const timer = window.ReleaseTimer;
+  const banner = document.getElementById('whatsNewBanner');
+  if (!releases || !timer || !banner) return;
+
+  const { current, history, upcoming } = releases;
+  const DISMISS_KEY = 'whatsNewDismissed';
+
+  // ?previewNow=+3d shows the page as it will look in three days. The clock keeps ticking from there.
+  const clock = timer.resolveNow(window.location.search, Date.now());
+  const skew = clock.now - Date.now();
+  const now = () => Date.now() + skew;
+
+  function readDismissed() {
+    try {
+      return localStorage.getItem(DISMISS_KEY);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeDismissed(version) {
+    try {
+      localStorage.setItem(DISMISS_KEY, version);
+    } catch (error) {
+      // Storage can be blocked (private windows); the banner just comes back next visit.
+    }
+  }
+
+  /* ---- the banner ---- */
+  document.getElementById('wnTitle').textContent = `v${current.version} is out: ${current.headline}`;
+  document.getElementById('wnChips').innerHTML = current.highlights
+    .map((highlight) => `<li>${escapeHtml(highlight.title)}</li>`)
+    .join('');
+  const dismissedVersion = readDismissed();
+  banner.hidden = !clock.isPreview && dismissedVersion === current.version;
+  document.getElementById('wnClose').addEventListener('click', () => {
+    banner.hidden = true;
+    if (!clock.isPreview) writeDismissed(current.version);
+  });
+
+  /* ---- the "what's new" section ---- */
+  document.getElementById('wnSectionTitle').textContent = `What's new in v${current.version}`;
+  document.getElementById('wnSectionLead').innerHTML =
+    `${escapeHtml(current.summary)} Released ${escapeHtml(timer.formatDate(current.releasedAt))}. ` +
+    `<a href="${escapeHtml(current.notesUrl)}">Read the changelog</a>.`;
+
+  document.getElementById('wnFeatures').innerHTML = current.highlights
+    .map((highlight) => {
+      const since = highlight.releasedAt || current.releasedAt;
+      const links = highlight.catalogIds
+        .map((id) => {
+          const entry = CATALOG.find((item) => item.id === id);
+          return entry ? `<button type="button" class="wn-link" data-open-catalog="${escapeHtml(id)}">${escapeHtml(entry.name)}</button>` : '';
+        })
+        .join('');
+      return (
+        `<article class="card wn-card">` +
+        `<span class="wn-live" data-since="${escapeHtml(since)}" data-format="live"></span>` +
+        `<h3>${escapeHtml(highlight.title)}</h3>` +
+        `<p>${escapeHtml(highlight.summary)}</p>` +
+        `<div class="wn-links">${links}</div>` +
+        `</article>`
+      );
+    })
+    .join('');
+  document.getElementById('wnFeatures').addEventListener('click', (event) => {
+    const link = event.target.closest('[data-open-catalog]');
+    if (link) openCatalogModal(link.dataset.openCatalog);
+  });
+
+  /* ---- the timeline: next release, this release, earlier releases ---- */
+  const items = [];
+  if (upcoming) {
+    const planned = upcoming.items
+      .map((item) => `<li><strong>${escapeHtml(item.title)}</strong> &mdash; ${escapeHtml(item.summary)}</li>`)
+      .join('');
+    items.push(
+      `<li class="tl-item tl-upcoming">` +
+        `<div class="tl-head"><span class="tl-version">v${escapeHtml(upcoming.version)}</span><span class="tl-tag">Up next</span></div>` +
+        `<p class="tl-meta">Target ${escapeHtml(timer.formatDate(upcoming.targetAt))} &middot; <span class="wn-clock" role="timer" data-target="${escapeHtml(upcoming.targetAt)}"></span></p>` +
+        `<div class="tl-bar" role="img" aria-label="Progress towards v${escapeHtml(upcoming.version)}"><span data-progress-from="${escapeHtml(current.releasedAt)}" data-progress-to="${escapeHtml(upcoming.targetAt)}"></span></div>` +
+        `<p class="tl-progress" data-progress-label data-version="${escapeHtml(upcoming.version)}"></p>` +
+        `<p class="tl-headline">${escapeHtml(upcoming.headline)} <em>(plans, subject to change)</em></p>` +
+        `<ul class="tl-list">${planned}</ul>` +
+        `</li>`
+    );
+  }
+  items.push(
+    `<li class="tl-item tl-current">` +
+      `<div class="tl-head"><span class="tl-version">v${escapeHtml(current.version)}</span><span class="tl-tag tl-tag-current">Current</span></div>` +
+      `<p class="tl-meta">Released ${escapeHtml(timer.formatDate(current.releasedAt))} &middot; <span data-since="${escapeHtml(current.releasedAt)}" data-format="live"></span></p>` +
+      `<p class="tl-headline">${escapeHtml(current.headline)}</p>` +
+      `</li>`
+  );
+  history.forEach((entry) => {
+    items.push(
+      `<li class="tl-item">` +
+        `<div class="tl-head"><span class="tl-version">v${escapeHtml(entry.version)}</span></div>` +
+        `<p class="tl-meta">Released ${escapeHtml(timer.formatDate(entry.releasedAt))} &middot; <span data-since="${escapeHtml(entry.releasedAt)}" data-format="ago"></span></p>` +
+        `<p class="tl-headline">${escapeHtml(entry.headline)}</p>` +
+        `</li>`
+    );
+  });
+  document.getElementById('releaseTimeline').innerHTML = items.join('');
+
+  document.getElementById('wnFootnote').innerHTML = clock.isPreview
+    ? `Previewing the site as it will look on <strong>${escapeHtml(timer.formatDate(clock.now))}</strong>. Remove <code>?previewNow</code> from the address to return to today.`
+    : `Dates are UTC and the timers update live. To see how this page will look later, add <code>?previewNow=+3d</code> to the address.`;
+
+  /* ---- one ticker keeps every timer current ---- */
+  const nextBox = document.getElementById('wnNext');
+  const nextLabel = document.getElementById('wnNextLabel');
+  const nextClock = document.getElementById('wnNextClock');
+  const wnAge = document.getElementById('wnAge');
+
+  function tick() {
+    const at = now();
+    wnAge.textContent = `· ${timer.liveFor(current.releasedAt, at)}`;
+
+    document.querySelectorAll('[data-since]').forEach((el) => {
+      el.textContent =
+        el.dataset.format === 'ago' ? timer.releasedAgo(el.dataset.since, at) : timer.liveFor(el.dataset.since, at);
+    });
+
+    document.querySelectorAll('[data-target]').forEach((el) => {
+      const target = timer.describeTarget(el.dataset.target, at);
+      el.textContent = !target ? '' : target.phase === 'scheduled' ? `Releases in ${target.text}` : target.phase === 'due' ? 'Due now' : `Target passed - ${target.text}`;
+      el.dataset.phase = target ? target.phase : '';
+    });
+
+    document.querySelectorAll('[data-progress-from]').forEach((bar) => {
+      const share = timer.progress(bar.dataset.progressFrom, bar.dataset.progressTo, at);
+      bar.style.width = `${(share * 100).toFixed(1)}%`;
+      const label = document.querySelector('[data-progress-label]');
+      if (label) label.textContent = `${Math.round(share * 100)}% of the way from v${current.version} to v${label.dataset.version}`;
+    });
+
+    if (upcoming) {
+      const target = timer.describeTarget(upcoming.targetAt, at);
+      nextBox.hidden = !target;
+      if (target) {
+        nextLabel.textContent = `Next: v${upcoming.version}`;
+        nextClock.textContent = target.phase === 'scheduled' ? `in ${target.text}` : target.phase === 'due' ? 'due now' : target.text;
+      }
+    }
+  }
+
+  tick();
+  setInterval(tick, 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) tick();
+  });
+})();

@@ -5,6 +5,7 @@
   "description": "Reusable, production-grade Lightning Web Components and Apex services for enterprise Salesforce projects.",
   "scripts": {
     "test": "sfdx-lwc-jest --skipApiVersionCheck",
+    "test:site": "node --test docs/release-timer.check.js docs/catalog.check.js",
     "test:watch": "sfdx-lwc-jest --watch --skipApiVersionCheck",
     "test:coverage": "sfdx-lwc-jest --coverage --skipApiVersionCheck",
     "lint": "eslint \"force-app/main/default/lwc/**/*.js\" \"force-app/test/**/*.js\" \"scripts/**/*.js\"",
