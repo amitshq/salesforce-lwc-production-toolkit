@@ -174,7 +174,8 @@ public with sharing class GenericQueryService {
         whereClauses.add('(' + String.join(searchClauses, ' OR ') + ')');
     }
 
-    private static Schema.DescribeSObjectResult describeObject(String objectApiName) {
+    // Shared with GenericAggregateService so identifier validation lives in one place.
+    public static Schema.DescribeSObjectResult describeObject(String objectApiName) {
         if (String.isBlank(objectApiName)) {
             throw new QueryServiceException('objectApiName is required.');
         }
@@ -202,18 +203,39 @@ public with sharing class GenericQueryService {
         return safe;
     }
 
-    private static String allowListSingleField(String rawField, Map<String, Schema.SObjectField> fieldMap) {
+    /** A field path that passed validation: the safe-to-concatenate path and the describe of its last field. */
+    public class ResolvedField {
+        public String path;
+        public Schema.DescribeFieldResult describe;
+    }
+
+    public static String allowListSingleField(String rawField, Map<String, Schema.SObjectField> fieldMap) {
+        ResolvedField resolved = resolveField(rawField, fieldMap);
+        return resolved == null ? null : resolved.path;
+    }
+
+    /**
+     * Validates a field name or relationship path (e.g. Owner.Name) hop by hop and
+     * returns the canonical path plus the describe of its last field, or null if any
+     * hop is unknown or not readable by the running user.
+     */
+    public static ResolvedField resolveField(String rawField, Map<String, Schema.SObjectField> fieldMap) {
         if (String.isBlank(rawField)) {
             return null;
         }
-        // Relationship paths (e.g. Owner.Name) are validated hop by hop.
         List<String> parts = rawField.trim().split('\\.');
         Map<String, Schema.SObjectField> currentFieldMap = fieldMap;
         List<String> validatedParts = new List<String>();
+        Schema.DescribeFieldResult lastDescribe;
 
         for (Integer i = 0; i < parts.size(); i++) {
-            String part = parts[i];
-            Schema.SObjectField token = currentFieldMap == null ? null : currentFieldMap.get(part.toLowerCase());
+            Boolean isLastPart = (i == parts.size() - 1);
+            Schema.SObjectField token = null;
+            if (currentFieldMap != null) {
+                // The field map is keyed by field name (ownerid); a relationship name
+                // (Owner) only appears as a describe property, so middle hops need a lookup.
+                token = isLastPart ? currentFieldMap.get(parts[i].toLowerCase()) : findRelationshipField(parts[i], currentFieldMap);
+            }
             if (token == null) {
                 return null;
             }
@@ -221,9 +243,9 @@ public with sharing class GenericQueryService {
             if (!fieldDescribe.isAccessible()) {
                 return null;
             }
-            validatedParts.add(fieldDescribe.getName());
+            validatedParts.add(isLastPart ? fieldDescribe.getName() : fieldDescribe.getRelationshipName());
+            lastDescribe = fieldDescribe;
 
-            Boolean isLastPart = (i == parts.size() - 1);
             if (!isLastPart) {
                 List<Schema.SObjectType> referenceTo = fieldDescribe.getReferenceTo();
                 if (referenceTo.isEmpty()) {
@@ -232,10 +254,23 @@ public with sharing class GenericQueryService {
                 currentFieldMap = referenceTo[0].getDescribe().fields.getMap();
             }
         }
-        return String.join(validatedParts, '.');
+        ResolvedField resolved = new ResolvedField();
+        resolved.path = String.join(validatedParts, '.');
+        resolved.describe = lastDescribe;
+        return resolved;
     }
 
-    private static List<String> buildFilterClauses(
+    private static Schema.SObjectField findRelationshipField(String relationshipName, Map<String, Schema.SObjectField> fieldMap) {
+        for (Schema.SObjectField token : fieldMap.values()) {
+            String candidate = token.getDescribe().getRelationshipName();
+            if (candidate != null && candidate.equalsIgnoreCase(relationshipName)) {
+                return token;
+            }
+        }
+        return null;
+    }
+
+    public static List<String> buildFilterClauses(
         List<QueryFilter> filters,
         Map<String, Schema.SObjectField> fieldMap,
         Map<String, Object> binds

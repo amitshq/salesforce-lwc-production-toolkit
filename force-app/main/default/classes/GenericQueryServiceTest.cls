@@ -73,6 +73,38 @@ private class GenericQueryServiceTest {
     }
 
     @IsTest
+    static void resolvesRelationshipNamesInFieldPaths() {
+        Test.startTest();
+        QueryResult result = GenericQueryService.query(
+            'Account',
+            new List<String>{ 'Name', 'Owner.Name' },
+            null,
+            'Owner.Name',
+            'ASC',
+            null,
+            null,
+            1,
+            10
+        );
+        Test.stopTest();
+
+        System.assertEquals(5, result.records.size());
+        SObject owner = result.records[0].getSObject('Owner');
+        System.assertNotEquals(null, owner, 'Owner.Name must be queried, not silently dropped.');
+        System.assertEquals(UserInfo.getName(), owner.get('Name'));
+    }
+
+    @IsTest
+    static void rejectsRelationshipPathsThroughNonRelationshipFields() {
+        Map<String, Schema.SObjectField> fieldMap = Account.SObjectType.getDescribe().fields.getMap();
+
+        System.assertEquals('Owner.Name', GenericQueryService.allowListSingleField('owner.name', fieldMap));
+        System.assertEquals(null, GenericQueryService.allowListSingleField('Name.Length', fieldMap), 'Name is not a relationship.');
+        System.assertEquals(null, GenericQueryService.allowListSingleField('Nope.Name', fieldMap));
+        System.assertEquals(null, GenericQueryService.allowListSingleField('Owner.Nope', fieldMap));
+    }
+
+    @IsTest
     static void throwsAuraHandledExceptionForUnknownObject() {
         Boolean threw = false;
         try {
