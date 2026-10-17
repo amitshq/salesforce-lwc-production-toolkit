@@ -664,6 +664,21 @@ import { deepClone, isEqual, getNestedValue, setNestedValue } from 'c/objectUtil
 | `getNestedValue` | `(obj, path, defaultValue?) => any` | Reads a dot/bracket path (`'a.b[0].c'`), returning `defaultValue` instead of throwing on a missing segment. |
 | `setNestedValue` | `(obj, path, value) => newObj` | Returns a new object with `value` set at `path`, without mutating the original; creates missing intermediate objects/arrays as needed. |
 
+### csvUtils
+
+```js
+import { escapeCsvValue, rowsToCsv, downloadCsv, exportRowsToCsv } from 'c/csvUtils';
+```
+
+| Function | Signature | Description |
+|---|---|---|
+| `escapeCsvValue` | `(value) => String` | RFC 4180 escaping: quotes fields that contain commas, quotes, or newlines. |
+| `rowsToCsv` | `(rows, columns) => String` | Builds a CSV string from row objects and datatable-style columns (`{ label, fieldName }`) or plain field-name strings. Relationship paths (`Owner.Name`) read the flattened `Owner_Name` alias first. |
+| `downloadCsv` | `(filename, csvContent) => void` | Triggers a browser file download of the given CSV string. |
+| `exportRowsToCsv` | `(rows, columns, filename = 'export.csv') => String` | Convenience wrapper: `rowsToCsv` + `downloadCsv`; returns the CSV content. |
+
+`c-enterprise-datatable-demo` uses this for its **Export CSV** bulk action.
+
 ### jsonUtils
 
 ```js

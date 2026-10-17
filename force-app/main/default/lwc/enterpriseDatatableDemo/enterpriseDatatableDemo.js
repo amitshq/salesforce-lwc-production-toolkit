@@ -1,4 +1,5 @@
 import { LightningElement } from 'lwc';
+import { exportRowsToCsv as downloadRowsAsCsv } from 'c/csvUtils';
 import { getMetadataRecordByDeveloperName } from 'c/metadataUtils';
 import { hasCustomPermission } from 'c/permissionUtils';
 
@@ -62,11 +63,7 @@ export default class EnterpriseDatatableDemo extends LightningElement {
         }
     }
 
-    // Illustrative only - swap in a real CSV export utility for production use.
     exportRowsToCsv(rows) {
-        const header = this.columns.map((column) => column.label).join(',');
-        const lines = rows.map((row) => this.columns.map((column) => row[column.fieldName.replace(/\./g, '_')] ?? '').join(','));
-        // eslint-disable-next-line no-console
-        console.log([header, ...lines].join('\n'));
+        downloadRowsAsCsv(rows, this.columns, 'accounts-export.csv');
     }
 }
