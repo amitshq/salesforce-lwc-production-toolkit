@@ -3,3 +3,4 @@
 **/__tests__/**
 **/*.test.js
 **/jest.config.js
+force-app/test/**

@@ -2,7 +2,10 @@
   "packageDirectories": [
     {
       "path": "force-app",
-      "default": true
+      "default": true,
+      "versionName": "v2.0.0",
+      "versionNumber": "2.0.0.NEXT",
+      "versionDescription": "Conflict-safe saves, CSV import, aggregates, saved views, live refresh."
     }
   ],
   "name": "salesforce-lwc-production-toolkit",

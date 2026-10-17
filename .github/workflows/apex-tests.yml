@@ -1,0 +1,56 @@
+name: Apex tests (scratch org)
+
+# Opt-in. Apex can only be tested inside a Salesforce org, so this needs a Dev
+# Hub login. To enable it, add the repository secret DEVHUB_SFDX_AUTH_URL (the
+# output of `sf org display --verbose --target-org <devhub>`, "Sfdx Auth Url"
+# line) and set the repository variable APEX_CI_ENABLED to "true".
+#
+# It only runs on pushes to dev and manual runs - never for pull requests from
+# forks, which cannot see secrets.
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  apex:
+    name: Deploy and run Apex tests
+    if: ${{ vars.APEX_CI_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Salesforce CLI
+        run: npm install --global @salesforce/cli
+
+      - name: Authenticate Dev Hub
+        env:
+          DEVHUB_SFDX_AUTH_URL: ${{ secrets.DEVHUB_SFDX_AUTH_URL }}
+        run: |
+          printf '%s' "$DEVHUB_SFDX_AUTH_URL" > "$RUNNER_TEMP/devhub.sfdx"
+          sf org login sfdx-url --sfdx-url-file "$RUNNER_TEMP/devhub.sfdx" --alias devhub --set-default-dev-hub
+          rm -f "$RUNNER_TEMP/devhub.sfdx"
+
+      - name: Create scratch org
+        run: sf org create scratch --definition-file config/project-scratch-def.json --alias ci-scratch --duration-days 1 --set-default --wait 15
+
+      - name: Deploy source
+        run: sf project deploy start --target-org ci-scratch --wait 20
+
+      - name: Assign permission set
+        run: sf org assign permset --name LWCToolkitAdmin --target-org ci-scratch
+
+      - name: Run Apex tests
+        run: sf apex run test --target-org ci-scratch --test-level RunLocalTests --code-coverage --result-format human --wait 20
+
+      - name: Delete scratch org
+        if: always()
+        run: sf org delete scratch --target-org ci-scratch --no-prompt
