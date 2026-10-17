@@ -64,7 +64,7 @@ export default class AggregateKpiCard extends LightningElement {
     isLoading = false;
 
     requestCounter = 0;
-    isConnected = false;
+    isActive = false;
     reloadQueued = false;
 
     @api
@@ -108,12 +108,12 @@ export default class AggregateKpiCard extends LightningElement {
     }
 
     connectedCallback() {
-        this.isConnected = true;
+        this.isActive = true;
         this.queueReload();
     }
 
     disconnectedCallback() {
-        this.isConnected = false;
+        this.isActive = false;
     }
 
     /** Re-runs the query with the current settings. */
@@ -133,13 +133,13 @@ export default class AggregateKpiCard extends LightningElement {
 
     // Settings arrive one at a time; wait a microtask so they produce one query, not five.
     queueReload() {
-        if (!this.isConnected || this.reloadQueued) {
+        if (!this.isActive || this.reloadQueued) {
             return;
         }
         this.reloadQueued = true;
         Promise.resolve().then(() => {
             this.reloadQueued = false;
-            if (this.isConnected) {
+            if (this.isActive) {
                 this.load();
             }
         });
