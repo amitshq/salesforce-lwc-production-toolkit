@@ -16,8 +16,9 @@ The owner decides which commits on `dev` are promoted to `main`, so a merged PR 
    npm install
    npm test
    npm run lint
+   npm run test:site
    ```
-4. If you add or change a component, update [USAGE.md](USAGE.md) and the feature map in [README.md](README.md).
+4. If you add or change a component or Apex service, update [USAGE.md](USAGE.md), the feature map in [README.md](README.md) and its entry in `docs/catalog.js` (the website catalog). `npm run test:site` fails if a component or Apex service has no catalog entry, or an entry points at a file that does not exist.
 5. Open a pull request **against `dev`**, and describe what it does and how you tested it.
 
 ## Notes

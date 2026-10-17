@@ -9,6 +9,9 @@ For the "why," see [README.md](README.md). This document only covers "how."
 - [Requirements](#requirements)
 - [Deploying this repo](#deploying-this-repo)
 - [Enterprise Datatable](#enterprise-datatable)
+  - [Conflict detection](#conflict-detection)
+  - [Column chooser and saved views](#column-chooser-and-saved-views)
+  - [Live refresh](#live-refresh)
 - [Other data components](#other-data-components)
   - [Multi-Select Lookup](#multi-select-lookup)
   - [Dynamic Filter Panel](#dynamic-filter-panel)
@@ -16,6 +19,10 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [Pagination](#pagination)
   - [File Upload Manager](#file-upload-manager)
   - [Image Gallery](#image-gallery)
+  - [CSV Import Wizard](#csv-import-wizard)
+  - [Aggregate KPI Card](#aggregate-kpi-card)
+  - [Datatable View Bar](#datatable-view-bar)
+  - [Column Chooser](#column-chooser)
 - [UX components](#ux-components)
   - [Modal](#modal)
   - [Confirm Dialog](#confirm-dialog)
@@ -34,6 +41,7 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [objectUtils](#objectutils)
   - [jsonUtils](#jsonutils)
   - [csvUtils](#csvutils)
+  - [csvImportEngine](#csvimportengine)
   - [urlUtils](#urlutils)
 - [Salesforce utility modules](#salesforce-utility-modules)
   - [apexErrorUtils](#apexerrorutils)
@@ -44,9 +52,12 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [metadataUtils](#metadatautils)
   - [toastService](#toastservice)
   - [lmsUtils](#lmsutils)
+  - [empUtils](#emputils)
 - [Apex services](#apex-services)
   - [GenericQueryService](#genericqueryservice)
   - [GenericDmlService](#genericdmlservice)
+  - [GenericAggregateService](#genericaggregateservice)
+  - [SavedViewService](#savedviewservice)
   - [PermissionService](#permissionservice-apex)
   - [CustomMetadataService](#custommetadataservice-apex)
   - [FileManagerService](#filemanagerservice-apex)
@@ -70,7 +81,7 @@ For the "why," see [README.md](README.md). This document only covers "how."
    ```bash
    sf project deploy start -o lwc-toolkit
    ```
-3. Assign the permission set (grants Apex class access, the `Toolkit_Bulk_Edit` custom permission, and FLS on the demo custom metadata fields):
+3. Assign the permission set (grants Apex class access, the `Toolkit_Bulk_Edit` custom permission, FLS on the demo custom metadata fields, and access to the `ToolkitSavedView__c` object behind saved views):
    ```bash
    sf org assign permset -o lwc-toolkit -n LWCToolkitAdmin
    ```
@@ -79,7 +90,9 @@ For the "why," see [README.md](README.md). This document only covers "how."
    sf org open -o lwc-toolkit
    ```
 
-To use any single component/utility in your own project instead of the whole repo, copy that component's folder from `force-app/main/default/lwc/` (and, for `enterpriseDatatable`, the four Apex classes under [Apex services](#apex-services) plus their `*.cls-meta.xml` files) into your own `force-app`.
+To use any single component/utility in your own project instead of the whole repo, copy that component's folder from `force-app/main/default/lwc/` (and, for `enterpriseDatatable`, the Apex classes under [Apex services](#apex-services) it calls - `GenericQueryService`, `GenericDmlService` and `PermissionService` with their `QueryResult`, `QueryFilter`, `DmlRecordInput`, `DmlResult` and `FieldAccess` types - plus their `*.cls-meta.xml` files) into your own `force-app`. Saved views additionally need `SavedViewService`, `SavedViewInfo` and the `ToolkitSavedView__c` object; the other components list what they call in their own sections.
+
+Two features need setup in the org beyond deploying: **live refresh** needs Change Data Capture enabled for the object (Setup, Integrations, Change Data Capture), and **saved views** need users to have access to `ToolkitSavedView__c` (the `LWCToolkitAdmin` permission set grants it).
 
 ---
 
@@ -141,6 +154,10 @@ Columns use the standard `lightning-datatable` column shape, with two additions:
 | `enableRowSelection` | Boolean | `false` | Shows the checkbox column and enables the bulk action bar. |
 | `bulkActions` | Array | `[]` | `[{ name, label, variant, iconName, disabled }]` — re-emitted via the `bulkaction` event. |
 | `enableBulkDelete` | Boolean | `false` | Adds a built-in "Delete" bulk action, gated on the object's `isDeletable` access and a confirmation dialog. |
+| `enableConflictDetection` | Boolean | `false` | Rejects an inline edit if someone else changed the record after it was loaded. See [Conflict detection](#conflict-detection). |
+| `enableColumnChooser` | Boolean | `false` | Adds a header button that opens a checkbox panel for hiding and showing columns. |
+| `viewKey` | String | — | Turns on per-user saved views. Any key that is unique to this table, e.g. `'accounts-main'`. |
+| `autoRefresh` | Boolean | `false` | Follows changes to the object made elsewhere. See [Live refresh](#live-refresh). |
 | `hideRefreshButton` | Boolean | `false` | Hides the header refresh button. |
 
 ### Events
@@ -148,12 +165,15 @@ Columns use the standard `lightning-datatable` column shape, with two additions:
 | Event | `detail` | When |
 |---|---|---|
 | `bulkaction` | `{ name, selectedRows }` | A `bulkActions` entry (not the built-in delete) was clicked. |
+| `liveerror` | `{ message }` | `auto-refresh` could not subscribe (for example Change Data Capture is off for the object). The table keeps working without live updates. |
 
 ### Methods
 
 | Method | Returns | Description |
 |---|---|---|
 | `refresh()` | `Promise<void>` | Re-runs the current query. Infinite mode resets to page 1; page mode re-fetches the current page. Clears selection and any in-progress edits. |
+| `applyConfig(config)` | `Promise<void>` | Applies a layout (see `currentConfig`) and re-queries from page 1. Columns, sort fields and filters the table does not have are ignored; `null` resets to the defaults. |
+| `currentConfig` | `Object` (getter) | The table's layout as a plain, JSON-safe object: `{ v, columns, sortedBy, sortedDirection, searchTerm, columnFilters }`. `columns` is `null` when every column is shown. |
 
 ### Filtering
 
@@ -170,6 +190,46 @@ Set `editable: true` on a column to enable inline editing (native `lightning-dat
 ### Bulk delete
 
 Set `enable-bulk-delete`. The delete action only appears if `PermissionService.checkObjectAccess` reports the object as deletable for the running user. Clicking it opens `c-confirm-dialog`; on confirmation, selected rows are sent to `GenericDmlService.deleteRecords`, which also reports partial failures.
+
+### Conflict detection
+
+Without it, an inline edit simply wins: if a colleague changed the same record while you were editing, their change is overwritten. Set `enable-conflict-detection` and the table also queries each row's `SystemModstamp` and sends it with the edit as `expectedModstamp`. `GenericDmlService` compares it with the record's current value and, if it differs, fails that row with `isConflict` instead of saving it.
+
+- A conflicting row stays in edit mode with the message "This record was changed by someone else after you loaded it. Refresh to see the latest version, then re-apply your edit." The rest of the batch saves, and the toast counts the conflicts.
+- After a successful save the table keeps the new `SystemModstamp` the server returned, so editing the same row again is checked against the version you just wrote.
+- It is a compare-then-write check, not a lock: two saves landing in the same instant can both pass it. Objects without a `SystemModstamp` field skip the check.
+
+### Column chooser and saved views
+
+`enable-column-chooser` adds a button to the card header that opens a checkbox panel (see [Column Chooser](#column-chooser)). Every column is still queried, so hiding and showing is instant and nothing is reloaded. The last visible column cannot be hidden, and columns without a `fieldName` (row actions) are always shown.
+
+`view-key` turns on saved views: a toolbar above the table (see [Datatable View Bar](#datatable-view-bar)) that saves the current visible columns, sort, search text and column filters under a name.
+
+```html
+<c-enterprise-datatable
+    object-api-name="Account"
+    columns={columns}
+    enable-column-chooser
+    view-key="accounts-main"
+></c-enterprise-datatable>
+```
+
+- Views belong to the user who saved them and to the view key. Use a different key for each table.
+- One view per user and table can be the default; it is applied when the table opens. The first query waits for it, so the table loads once rather than twice. If the views cannot be read, the table loads with its defaults and the toolbar shows the error.
+- Applying a view ignores anything the table no longer has: a removed column, a filter on a column that is no longer `filterable`.
+- To drive the same layout from your own code, read `currentConfig` and pass it to `applyConfig` later.
+- Storage is the Private `ToolkitSavedView__c` object through [`SavedViewService`](#savedviewservice).
+
+### Live refresh
+
+`auto-refresh` keeps the table current without anyone pressing Refresh. It subscribes to the object's Change Data Capture channel through [`empUtils`](#emputils), so Change Data Capture must be enabled for the object. After a burst of changes settles (two seconds), the table decides:
+
+| Situation | What happens |
+|---|---|
+| Page mode, nothing selected, no unsaved edits | Reloads the page it is on, quietly. If that page no longer exists, it loads the last one. |
+| Unsaved edits, a selection, or infinite mode | Shows a "Records have changed" bar with a **Refresh** button and leaves the choice to the user. Refreshing clears edits and selection. |
+
+It never reloads under an edit: a reload would replace the `SystemModstamp` values the table is holding, so an edit made against the old data would then pass [conflict detection](#conflict-detection) and overwrite someone else's change. Changes caused by the table's own save or delete are ignored for a few seconds. The subscription ends when the table leaves the page. If it cannot be made, the table fires `liveerror` and carries on without live updates.
 
 ---
 
@@ -329,6 +389,135 @@ Pair it with `FileManagerService.getFilesForRecord`'s `latestVersionId` (rendere
 |---|---|---|---|
 | `images` | Array | `[]` | `[{ url, title }]`. |
 | `columns` | Number | `4` | Grid columns. |
+
+### CSV Import Wizard
+
+`c-csv-import-wizard` &mdash; upload a CSV, map its columns to fields, review what will happen, then import in chunks through `GenericDmlService.saveRecords`. A bad row is reported by its row number instead of failing the whole file. Put it in a `c-modal` (as the demo does) or on a page of its own.
+
+```html
+<c-csv-import-wizard
+    object-api-name="Account"
+    fields={importFields}
+    onimportcomplete={handleImportComplete}
+></c-csv-import-wizard>
+```
+
+```js
+importFields = [
+    { apiName: 'Name', label: 'Account Name', type: 'text', required: true },
+    { apiName: 'Industry', label: 'Industry', type: 'text' },
+    { apiName: 'AnnualRevenue', label: 'Annual Revenue', type: 'currency' }
+];
+
+handleImportComplete(event) {
+    const { successCount, failureCount, validationFailureCount, notAttemptedCount } = event.detail;
+    this.template.querySelector('c-enterprise-datatable').refresh();
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `objectApiName` | String | — (required) | The sObject to insert into or update. |
+| `fields` | Array | `[]` | `[{ apiName, label, type, required }]` &mdash; the fields a column may be mapped to (same shape as `c-dynamic-form`). `type` is one of `text`, `number`/`currency`/`percent`/`integer`/`double`, `checkbox`/`boolean`, `date`, `datetime`, `email`. |
+| `chunkSize` | Number | `200` | Rows per `saveRecords` call. Each chunk is its own transaction, so a large import is not all-or-nothing. |
+| `maxRows` | Number | `5000` | A file with more data rows is refused with a message. Files over 5 MB are refused too. |
+
+**Events**: `importcomplete` (`{ successCount, failureCount, validationFailureCount, notAttemptedCount, emptyRowCount }`) &mdash; the import finished, or was cancelled between chunks (`notAttemptedCount` is what was left).
+
+**Methods**: `reset()` &mdash; back to the upload step. Call it when the surrounding modal closes.
+
+The four steps:
+
+1. **Upload.** The first row is the header. Quoted fields, embedded commas and newlines, CRLF and a leading BOM are handled (see [`csvUtils`](#csvutils)).
+2. **Map columns.** Headers are matched to fields by API name or label, ignoring case and punctuation; a header of `Id` maps to the record Id. The mapping can be changed, and **Next** is blocked while a required field is unmapped or two columns map to one field.
+3. **Review.** Every row is converted and validated before anything is sent: how many will be created, how many updated, and a list of problems by row number and field, with a downloadable report. Rows with problems are skipped, not sent.
+4. **Import.** Chunks go to the server one after another, with progress and a **Cancel** that stops after the chunk in flight. Afterwards a report of server-side failures can be downloaded.
+
+Rules worth knowing: a row with an `Id` updates that record and a row without one creates a new record; empty cells are never sent, so an update cannot blank a field by accident; fully blank rows are ignored; required fields are only enforced on rows without an `Id`; row numbers count the header as row 1, so they match what a spreadsheet shows.
+
+### Aggregate KPI Card
+
+`c-aggregate-kpi-card` &mdash; a KPI tile that computes its own number. It runs one COUNT, SUM, AVG, MIN or MAX through [`GenericAggregateService`](#genericaggregateservice), so object and field security apply, and shows it on a [`c-kpi-card`](#kpi-card).
+
+```html
+<c-aggregate-kpi-card
+    label="Open pipeline"
+    object-api-name="Opportunity"
+    function-name="SUM"
+    field-name="Amount"
+    filters={openFilters}
+    comparison-filters={lastMonthFilters}
+    trend-label="vs last month"
+    format="currency"
+></c-aggregate-kpi-card>
+```
+
+```js
+openFilters = [{ fieldName: 'IsClosed', operatorName: '=', value: false }];
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `objectApiName` | String | — (required) | The sObject to aggregate. |
+| `functionName` | String | `'COUNT'` | `COUNT`, `SUM`, `AVG`, `MIN` or `MAX`. `SUM` and `AVG` need a numeric field. |
+| `fieldName` | String | — | The field to aggregate. Leave blank for `COUNT` to count records. |
+| `filters` | Array | `[]` | `[{ fieldName, operatorName, value }]` &mdash; the same shape as `enterpriseDatatable`'s `static-filters`. |
+| `comparisonFilters` | Array | — | A second, complete filter set. When given, the aggregate runs again with it and the percentage change from that figure to the current one is shown as the trend. No trend is shown when the comparison figure is zero or empty. |
+| `label`, `trendLabel`, `format`, `currencyCode`, `iconName`, `variant` | | | Passed to `c-kpi-card`; see [KPI Card](#kpi-card). `format` defaults to `'number'`. |
+
+**Methods**: `refresh()`.
+
+It queries when it appears and again whenever one of its settings changes (a parent passing an equal copy of the same filters does not count), and it ignores a slow response that arrives after a newer one. A failed query shows the server's message in place of the card. The only Apex it needs is `GenericAggregateService`, and the users need access to that class.
+
+### Datatable View Bar
+
+`c-datatable-view-bar` &mdash; the saved-views toolbar that `enterpriseDatatable` shows when `view-key` is set. It owns the calls to [`SavedViewService`](#savedviewservice) and nothing else: the table tells it its current settings and it reports what the user chose, so it can also front a table you built yourself.
+
+```html
+<c-datatable-view-bar
+    view-key="accounts-main"
+    object-api-name="Account"
+    current-config={currentConfig}
+    onviewsready={handleViewsReady}
+    onviewselect={handleViewSelect}
+></c-datatable-view-bar>
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `viewKey` | String | — (required) | Identifies the table. Views are stored per user and key. |
+| `objectApiName` | String | — | Stored with each view for administration. |
+| `currentConfig` | Object | — | The table's settings. It is saved as JSON and handed back unchanged; the bar only compares it with the selected view to show **Unsaved changes**. |
+
+**Events**: `viewsready` (`{ viewId, config }`) &mdash; once, after the first load, with the default view's settings or `config: null`. It fires even if loading failed, so wait for it before your first query. `viewselect` (`{ viewId, config }`) &mdash; the user picked a view; `config` is `null` for **All records**, meaning reset to the defaults.
+
+From the bar the user can pick a view, **Save as new view** (a view with the same name asks before being replaced), **Update view** when the table differs from the selected one, **Make default** or **Remove default**, and **Delete view** (after a confirmation).
+
+### Column Chooser
+
+`c-column-chooser` &mdash; a panel of checkboxes for choosing which columns a table shows. It never changes anything itself: it reports the new selection and the owner decides.
+
+```html
+<c-column-chooser
+    columns={chooserColumns}
+    visible-fields={visibleFields}
+    onchange={handleChange}
+></c-column-chooser>
+```
+
+```js
+chooserColumns = [{ fieldName: 'Name', label: 'Account Name' }, { fieldName: 'Phone', label: 'Phone' }];
+handleChange(event) {
+    this.visibleFields = event.detail.visibleFields; // ['Name'], in column order
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `columns` | Array | `[]` | `[{ fieldName, label }]`. Entries without a `fieldName` are ignored. |
+| `visibleFields` | Array&lt;String&gt; | — | The fields currently shown. Omit (or `null`) for all. |
+
+**Events**: `change` (`{ visibleFields }`) &mdash; a box was toggled or **Show all** was clicked. Always in column order. Unchecking the last visible column is refused and the box is put back.
 
 ---
 
@@ -596,7 +785,7 @@ This only hides/shows UI &mdash; it is not the security boundary. The real enfor
 
 ### KPI Card
 
-`c-kpi-card` &mdash; a single stat tile for dashboards: value, label, optional trend delta and icon. Purely presentational &mdash; feed it a number from wherever (an aggregate Apex method, `GenericQueryService`'s `totalCount`, a report).
+`c-kpi-card` &mdash; a single stat tile for dashboards: value, label, optional trend delta and icon. Purely presentational &mdash; feed it a number from wherever (an aggregate Apex method, `GenericQueryService`'s `totalCount`, a report). To have the number computed for you, use [`c-aggregate-kpi-card`](#aggregate-kpi-card).
 
 ```html
 <c-kpi-card label="Open Opportunities" value={openCount} format="number" icon-name="utility:opportunity"></c-kpi-card>
@@ -668,7 +857,7 @@ import { deepClone, isEqual, getNestedValue, setNestedValue } from 'c/objectUtil
 ### csvUtils
 
 ```js
-import { escapeCsvValue, neutralizeFormula, rowsToCsv, downloadCsv, exportRowsToCsv } from 'c/csvUtils';
+import { escapeCsvValue, neutralizeFormula, rowsToCsv, downloadCsv, exportRowsToCsv, parseCsv, parseCsvTable } from 'c/csvUtils';
 
 exportRowsToCsv(selectedRows, this.columns, 'accounts-export.csv');
 ```
@@ -680,10 +869,35 @@ exportRowsToCsv(selectedRows, this.columns, 'accounts-export.csv');
 | `rowsToCsv` | `(rows, columns, { neutralizeFormulas = true }?) => String` | Builds a CSV string (CRLF-separated) from row objects and datatable-style columns (`{ label, fieldName }`) or plain field-name strings. Columns without a `fieldName` (row-action/button columns) are skipped. Relationship paths (`Owner.Name`) are read from the flattened `Owner_Name` alias, then from the nested object (`row.Owner.Name`) as Apex returns it. |
 | `downloadCsv` | `(filename, csvContent) => void` | Triggers a browser file download. A UTF-8 BOM is prepended so Excel reads non-ASCII text correctly. |
 | `exportRowsToCsv` | `(rows, columns, filename = 'export.csv', options?) => String` | Convenience wrapper: `rowsToCsv` + `downloadCsv`; returns the CSV content. |
+| `parseCsv` | `(text) => string[][]` | RFC 4180 parser: quoted fields, embedded commas, quotes and newlines, CRLF or LF, a leading BOM. Blank lines are dropped. Throws `"The file has a quoted field that is never closed."` for an unterminated quote. It reads back what `rowsToCsv` writes. |
+| `parseCsvTable` | `(text) => { headers, rows }` | `parseCsv` with the first record split off as the header row. |
 
 Formula neutralization is on by default because exported Salesforce text is user-entered. The cost is that a text value such as a phone number `+1 (555) 123-4567` is exported as `'+1 (555) 123-4567`; pass `{ neutralizeFormulas: false }` if the file will not be opened in a spreadsheet.
 
-`c-enterprise-datatable-demo` uses this for its **Export CSV** bulk action.
+`c-enterprise-datatable-demo` uses this for its **Export CSV** bulk action, and [`c-csv-import-wizard`](#csv-import-wizard) uses `parseCsvTable` to read an uploaded file.
+
+### csvImportEngine
+
+```js
+import { autoMapColumns, validateMapping, buildRecords } from 'c/csvImportEngine';
+import { parseCsvTable } from 'c/csvUtils';
+
+const { headers, rows } = parseCsvTable(text);
+const mapping = autoMapColumns(headers, fields);
+const problems = validateMapping(mapping, fields);
+const { records, errors, invalidRowCount, emptyRowCount } = buildRecords({ rows, mapping, fields });
+```
+
+The UI-free logic behind `c-csv-import-wizard`, for importing without its screens. A "field" is `{ apiName, label, type, required }`, and a mapping is one API name per CSV column (`''` for a column that is not imported, `'Id'` for the record Id).
+
+| Function | Signature | Description |
+|---|---|---|
+| `autoMapColumns` | `(headers, fields) => string[]` | Matches headers to API names or labels, ignoring case, spaces and punctuation; a header of `Id` maps to the record Id. Each field is used once. |
+| `validateMapping` | `(mapping, fields) => string[]` | Messages for what blocks an import: nothing mapped at all, two columns mapped to one field, or a required field with no column (not checked when an `Id` column is mapped, since an update can be partial). Empty means fine. |
+| `coerceValue` | `(raw, type) => { skip } \| { value } \| { error }` | Converts one cell. An empty cell is `{ skip: true }`, never a blank sent to the server. Numbers accept `1,234.50`; booleans accept true/false, yes/no, y/n, 1/0 and x; dates must be ISO (`2026-10-17`). |
+| `buildRecords` | `({ rows, mapping, fields }) => { records, errors, invalidRowCount, emptyRowCount }` | `records` is `[{ rowNumber, fields }]`, ready for `saveRecords`; `errors` is `[{ rowNumber, fieldLabel, message }]`. Row numbers count the header as row 1. A row with any error is left out of `records` entirely. Fully blank rows are counted in `emptyRowCount`. Required fields are only enforced on rows without an `Id`. |
+
+`ID_FIELD` (`'Id'`) is exported for the mapping value that means "update this record".
 
 ### jsonUtils
 
@@ -883,6 +1097,34 @@ export default class MyComponent extends LightningElement {
 | `unsubscribeFromChannel` | `(subscription)` | No-ops on a falsy subscription (safe to call unconditionally in `disconnectedCallback`). |
 | `createChannelController` | `(messageContext, channel) => { publish, subscribe, unsubscribe }` | Bundles a channel + context so calling `subscribe()` a second time replaces the first subscription instead of silently creating a duplicate. |
 
+### empUtils
+
+A thin wrapper over `lightning/empApi` for "tell me when records of this object change". It subscribes to the object's Change Data Capture channel, so Change Data Capture must be enabled for the object (Setup, Integrations, Change Data Capture); otherwise `subscribeToObjectChanges` rejects. Only events from the moment of subscribing arrive; nothing is replayed.
+
+```js
+import { subscribeToObjectChanges } from 'c/empUtils';
+
+async connectedCallback() {
+    this.stopWatching = await subscribeToObjectChanges('Account', (change) => {
+        // change.changeType: 'CREATE' | 'UPDATE' | 'DELETE' | 'UNDELETE'
+        // change.recordIds, change.commitUser, change.entityName, change.raw
+        this.reload();
+    });
+}
+
+disconnectedCallback() {
+    if (this.stopWatching) this.stopWatching();
+}
+```
+
+| Function | Signature | Description |
+|---|---|---|
+| `getChangeEventChannel` | `(objectApiName) => string` | `Account` becomes `/data/AccountChangeEvent`; a custom object swaps the `__c` suffix, so `Invoice__c` becomes `/data/Invoice__ChangeEvent`. Throws without an object name. |
+| `normalizeChangeEvent` | `(message) => { changeType, entityName, recordIds, commitUser, raw }` | Flattens the platform's envelope. Missing parts come back `undefined` or `[]`. |
+| `subscribeToObjectChanges` | `(objectApiName, onChange) => Promise<() => Promise<void>>` | Resolves once subscribed, to a function that ends the subscription; calling it again does nothing. |
+
+`c-enterprise-datatable` uses this for `auto-refresh`.
+
 ---
 
 ## Apex services
@@ -902,7 +1144,7 @@ public static QueryResult query(
 - `filters`: list of `QueryFilter { fieldName, operatorName, value }`. Supported operators: `=`, `!=`, `<`, `<=`, `>`, `>=`, `LIKE`, `IN`, `NOT IN`.
 - Unknown/inaccessible fields are silently dropped (not an error); an unknown object throws.
 - Field/object identifiers are validated against schema describes; values are bound via `Database.queryWithBinds` — never string-concatenated.
-- Relationship paths (`'Owner.Name'`) are supported and validated hop-by-hop.
+- Relationship paths (`'Owner.Name'`) are supported and validated hop-by-hop: each relationship name (`Owner`) is resolved to its lookup field (`OwnerId`), the lookup must be readable by the running user, and the canonical path is what goes into the query.
 
 **Keyset (cursor) pagination**, for large or fast-growing tables where OFFSET gets slower the deeper you page:
 
@@ -928,10 +1170,49 @@ public static List<DmlResult> saveRecords(String objectApiName, List<DmlRecordIn
 public static List<DmlResult> deleteRecords(String objectApiName, List<String> recordIds)
 ```
 
-- `DmlRecordInput`: `{ rowKey, fields }` — `fields` is a map of field API name to value; include `Id` to update, omit it to insert.
-- `DmlResult`: `{ rowKey, recordId, success, message, fieldNames }` — one per input row, correlated by `rowKey`.
+- `DmlRecordInput`: `{ rowKey, fields, expectedModstamp }` — `fields` is a map of field API name to value; include `Id` to update, omit it to insert. `expectedModstamp` is optional: the `SystemModstamp` you loaded, as epoch milliseconds.
+- `DmlResult`: `{ rowKey, recordId, success, message, fieldNames, isConflict, modstamp }` — one per input row, correlated by `rowKey`.
+- With `expectedModstamp`, an update whose record has a different `SystemModstamp` now fails with `isConflict: true` and a message saying someone else changed it; the other rows still save. After a successful checked update, `modstamp` is the new value, to use for the next edit. Objects without a `SystemModstamp` field skip the check. It is compare-then-write, not a lock.
 - Runs with `allOrNone=false`: one bad row never blocks the rest of the batch.
 - FLS enforced via `Security.stripInaccessible` before every insert/update.
+
+### GenericAggregateService
+
+```apex
+@AuraEnabled(cacheable=true)
+public static List<AggregateRow> aggregate(
+    String objectApiName, List<AggregateSpec> aggregates, List<String> groupByFields,
+    List<QueryFilter> filters, Integer maxGroups
+)
+```
+
+- `AggregateSpec`: `{ functionName, fieldName, alias }`. `functionName` is `COUNT`, `SUM`, `AVG`, `MIN` or `MAX` (any case). `fieldName` may be blank for `COUNT`, which then counts records; with a field it counts the records where that field is not null. `alias` is the key the result comes back under: letters, numbers and underscores, starting with a letter, at most 30 characters, unique within the call.
+- Returns one `AggregateRow` per group: `{ groups: Map<field, value>, values: Map<alias, value> }`. Without `groupByFields` there is a single row and `groups` is empty. With them, rows are ordered by the group-by fields and capped at `maxGroups` (default 50, never more than 200); when there are more groups than the cap, the ones first in that order come back.
+- At most 10 aggregates and 3 group-by fields per call. Group-by fields may be relationship paths (`'Owner.Name'`) and must be groupable (a long text area is not).
+- Nulls are ignored by `SUM`, `AVG`, `MIN` and `MAX`, so an empty set gives `null`; `COUNT` gives `0`.
+- It is strict where `GenericQueryService` is forgiving: an unknown or unreadable field, `SUM`/`AVG` on a non-numeric field, an unsupported function or an invalid alias throws, because silently dropping an aggregate would return a different number than the one asked for.
+- Same security model as the query service: identifiers are validated against schema describes, aliases are only ever used as keys in the result (the query uses generated names), filter values are bound via `Database.queryWithBinds`, and it runs under `AccessLevel.USER_MODE`. `filters` takes the same `QueryFilter` list as `GenericQueryService.query`.
+
+### SavedViewService
+
+```apex
+@AuraEnabled public static List<SavedViewInfo> getViews(String viewKey)
+
+@AuraEnabled
+public static SavedViewInfo saveView(
+    String viewKey, String objectApiName, String name, String config, Boolean makeDefault, Id viewId
+)
+
+@AuraEnabled public static List<SavedViewInfo> setDefaultView(String viewKey, Id viewId)
+@AuraEnabled public static void deleteView(Id viewId)
+```
+
+- `SavedViewInfo`: `{ id, name, config, isDefault }`. `config` is the JSON the datatable wrote; the server only checks that it is a JSON object under 30,000 characters and otherwise treats it as opaque.
+- `getViews` returns the running user's views for a key, ordered by name.
+- `saveView` with a `viewId` updates (and may rename) that view; without one, a view with the same name (case-insensitive) is replaced, otherwise a new view is created. Renaming onto another view's name is refused. `makeDefault` `null` leaves the default flag as it is; `true` clears it on the user's other views for the key. At most 50 views per user and key; names up to 80 characters.
+- `setDefaultView` makes one view the default, or clears the default when `viewId` is `null`, and returns the refreshed list.
+- Views live in the Private `ToolkitSavedView__c` object, and every query filters on `OwnerId` as well as running in user mode, so a user with View All Data still cannot read, change or delete another user's views.
+- Saving a default does not lock: two browser tabs doing it at the same moment can leave two defaults, and the datatable then applies the first it finds.
 
 ### PermissionService (Apex)
 
@@ -981,11 +1262,12 @@ Backs `c-file-upload-manager`. Reads/deletes `ContentDocument`/`ContentDocumentL
 
 ```bash
 npm install
-npm test             # Jest — 220 tests across every LWC/util module
+npm test             # Jest — 374 tests across every LWC/util module
+npm run test:site     # the website's release timer, catalog and permission-set coverage (29 checks, node --test)
 npm run lint          # ESLint
 ```
 
-Apex tests (`*Test.cls`, 24 methods) run in your org:
+Apex tests (`*Test.cls`, 67 methods) run in your org:
 
 ```bash
 sf apex run test -o lwc-toolkit -c -r human
