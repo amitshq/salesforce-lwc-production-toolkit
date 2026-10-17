@@ -15,6 +15,9 @@ const FALLBACK_PAGE_SIZE = 25;
  *  - permissionUtils gating the bulk-delete action on the
  *    Toolkit_Bulk_Edit custom permission, on top of the object-level
  *    isDeletable check c-enterprise-datatable already does itself
+ *  - enable-conflict-detection, so an inline edit is rejected (not silently
+ *    overwritten) if someone else changed the record after it was loaded
+ *  - c-csv-import-wizard in a c-modal, refreshing the table when it finishes
  */
 export default class EnterpriseDatatableDemo extends LightningElement {
     pageSize = FALLBACK_PAGE_SIZE;
@@ -31,6 +34,13 @@ export default class EnterpriseDatatableDemo extends LightningElement {
     searchFields = ['Name', 'Industry'];
 
     bulkActions = [{ name: 'export', label: 'Export CSV', iconName: 'utility:download' }];
+
+    importFields = [
+        { apiName: 'Name', label: 'Account Name', type: 'text', required: true },
+        { apiName: 'Industry', label: 'Industry', type: 'text' },
+        { apiName: 'Phone', label: 'Phone', type: 'text' },
+        { apiName: 'AnnualRevenue', label: 'Annual Revenue', type: 'currency' }
+    ];
 
     connectedCallback() {
         getMetadataRecordByDeveloperName('ToolkitDemoSetting__mdt', 'Default', ['DefaultPageSize__c'])
@@ -54,6 +64,18 @@ export default class EnterpriseDatatableDemo extends LightningElement {
 
     get enableBulkDelete() {
         return this.canBulkEdit;
+    }
+
+    handleImportClick() {
+        this.template.querySelector('c-modal').open();
+    }
+
+    handleImportClose() {
+        this.template.querySelector('c-csv-import-wizard').reset();
+    }
+
+    handleImportComplete() {
+        this.template.querySelector('c-enterprise-datatable').refresh();
     }
 
     handleBulkAction(event) {

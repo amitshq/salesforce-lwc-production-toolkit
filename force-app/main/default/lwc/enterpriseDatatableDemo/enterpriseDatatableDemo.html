@@ -1,4 +1,8 @@
 <template>
+    <div class="slds-grid slds-grid_align-end slds-p-bottom_x-small">
+        <lightning-button label="Import CSV" icon-name="utility:upload" onclick={handleImportClick}></lightning-button>
+    </div>
+
     <c-enterprise-datatable
         object-api-name="Account"
         title="Accounts"
@@ -8,8 +12,13 @@
         bulk-actions={bulkActions}
         enable-row-selection
         enable-bulk-delete={enableBulkDelete}
+        enable-conflict-detection
         default-sort-field="Name"
         default-sort-direction="asc"
         onbulkaction={handleBulkAction}
     ></c-enterprise-datatable>
+
+    <c-modal header-label="Import accounts from CSV" size="large" onclose={handleImportClose}>
+        <c-csv-import-wizard object-api-name="Account" fields={importFields} onimportcomplete={handleImportComplete}></c-csv-import-wizard>
+    </c-modal>
 </template>

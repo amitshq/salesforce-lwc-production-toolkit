@@ -1,0 +1,129 @@
+<template>
+    <div class="slds-p-around_medium">
+        <lightning-progress-indicator current-step={indicatorStep} type="base" class="slds-p-bottom_medium">
+            <template for:each={steps} for:item="step">
+                <lightning-progress-step key={step.value} label={step.label} value={step.value}></lightning-progress-step>
+            </template>
+        </lightning-progress-indicator>
+
+        <template if:true={isUploadStep}>
+            <p class="slds-p-bottom_small">
+                Choose a CSV file with a header row. Dates must be <strong>YYYY-MM-DD</strong>. Rows that contain an Id update that record;
+                rows without one create a new record. Empty cells are never sent.
+            </p>
+            <lightning-input type="file" label="CSV file" accept=".csv,text/csv" onchange={handleFileChange}></lightning-input>
+            <template if:true={hasUploadError}>
+                <p class="slds-text-color_error slds-p-top_small" role="alert">{uploadError}</p>
+            </template>
+        </template>
+
+        <template if:true={isMapStep}>
+            <p class="slds-p-bottom_small slds-text-color_weak">{fileSummary}</p>
+            <template for:each={columnRows} for:item="column">
+                <div key={column.key} class="slds-grid slds-gutters_small slds-grid_vertical-align-center slds-p-bottom_x-small">
+                    <div class="slds-col slds-size_1-of-3">
+                        <p class="slds-text-title_bold">{column.header}</p>
+                        <p class="slds-text-body_small slds-text-color_weak slds-truncate" title={column.sample}>{column.sample}</p>
+                    </div>
+                    <div class="slds-col slds-size_2-of-3">
+                        <lightning-combobox
+                            label="Import into"
+                            variant="label-hidden"
+                            value={column.value}
+                            options={mappingOptions}
+                            data-index={column.index}
+                            onchange={handleMappingChange}
+                        ></lightning-combobox>
+                    </div>
+                </div>
+            </template>
+            <template if:true={hasMappingProblems}>
+                <ul class="slds-text-color_error slds-p-top_small" role="alert">
+                    <template for:each={mappingProblems} for:item="problem">
+                        <li key={problem}>{problem}</li>
+                    </template>
+                </ul>
+            </template>
+            <div class="slds-grid slds-grid_align-spread slds-p-top_medium">
+                <lightning-button label="Back" onclick={handleBackToUpload}></lightning-button>
+                <lightning-button label="Next" variant="brand" onclick={handleMapNext}></lightning-button>
+            </div>
+        </template>
+
+        <template if:true={isReviewStep}>
+            <p class="slds-text-heading_small slds-p-bottom_small">{reviewSummary}</p>
+
+            <template if:true={hasErrors}>
+                <div class="slds-box slds-theme_error slds-m-bottom_small">
+                    <ul>
+                        <template for:each={listedErrors} for:item="error">
+                            <li key={error.key}>{error.text}</li>
+                        </template>
+                    </ul>
+                    <template if:true={hasMoreErrors}>
+                        <p class="slds-p-top_x-small">{moreErrorsText}</p>
+                    </template>
+                    <lightning-button
+                        class="slds-m-top_x-small"
+                        label="Download problem report"
+                        onclick={handleDownloadErrors}
+                    ></lightning-button>
+                </div>
+            </template>
+
+            <template if:false={cannotImport}>
+                <p class="slds-text-title_bold slds-p-bottom_xx-small">Preview (first rows that will be imported)</p>
+                <div class="slds-scrollable_x">
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        <thead>
+                            <tr>
+                                <th>Row</th>
+                                <template for:each={previewHeaders} for:item="header">
+                                    <th key={header.key}>{header.label}</th>
+                                </template>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template for:each={previewRows} for:item="row">
+                                <tr key={row.rowNumber}>
+                                    <td>{row.rowNumber}</td>
+                                    <template for:each={row.cells} for:item="cell">
+                                        <td key={cell.key}>{cell.value}</td>
+                                    </template>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <div class="slds-grid slds-grid_align-spread slds-p-top_medium">
+                <lightning-button label="Back" onclick={handleReviewBack}></lightning-button>
+                <lightning-button label={importButtonLabel} variant="brand" disabled={cannotImport} onclick={handleStartImport}></lightning-button>
+            </div>
+        </template>
+
+        <template if:true={isImportStep}>
+            <p class="slds-p-bottom_small">Importing... please keep this window open.</p>
+            <lightning-progress-bar value={progress} size="large"></lightning-progress-bar>
+            <p class="slds-text-align_center slds-p-top_xx-small">{progressLabel}</p>
+            <div class="slds-grid slds-grid_align-center slds-p-top_medium">
+                <lightning-button label="Cancel" onclick={handleCancelImport}></lightning-button>
+            </div>
+        </template>
+
+        <template if:true={isDoneStep}>
+            <ul class="slds-p-bottom_small">
+                <template for:each={resultLines} for:item="line">
+                    <li key={line.key}>{line.text}</li>
+                </template>
+            </ul>
+            <div class="slds-grid slds-grid_align-spread">
+                <template if:true={hasFailures}>
+                    <lightning-button label="Download error report" onclick={handleDownloadErrors}></lightning-button>
+                </template>
+                <lightning-button label="Import another file" variant="brand" onclick={handleImportAnother}></lightning-button>
+            </div>
+        </template>
+    </div>
+</template>

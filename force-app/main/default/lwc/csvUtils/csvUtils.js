@@ -104,6 +104,80 @@ export function rowsToCsv(rows = [], columns = [], { neutralizeFormulas = true }
 }
 
 /**
+ * Parses CSV text into an array of rows (arrays of strings), following
+ * RFC 4180: quoted fields may contain commas, quotes (doubled) and newlines;
+ * records end at CRLF, LF or CR. A leading UTF-8 BOM is ignored and fully
+ * blank lines are dropped.
+ * @param {string} text
+ * @returns {string[][]}
+ * @throws {Error} if a quoted field is never closed
+ */
+export function parseCsv(text) {
+    const source = typeof text === 'string' && text.charCodeAt(0) === 0xfeff ? text.slice(1) : String(text ?? '');
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < source.length; i++) {
+        const ch = source[i];
+        if (inQuotes) {
+            if (ch === '"') {
+                if (source[i + 1] === '"') {
+                    field += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else {
+                field += ch;
+            }
+        } else if (ch === '"' && field === '') {
+            inQuotes = true;
+        } else if (ch === ',') {
+            row.push(field);
+            field = '';
+        } else if (ch === '\r' || ch === '\n') {
+            if (ch === '\r' && source[i + 1] === '\n') {
+                i++;
+            }
+            row.push(field);
+            rows.push(row);
+            row = [];
+            field = '';
+        } else {
+            field += ch;
+        }
+    }
+
+    if (inQuotes) {
+        throw new Error('The file has a quoted field that is never closed.');
+    }
+    if (field !== '' || row.length > 0) {
+        row.push(field);
+        rows.push(row);
+    }
+    return rows.filter((r) => !(r.length === 1 && r[0] === ''));
+}
+
+/**
+ * Parses CSV text whose first record is a header row. Data rows are padded
+ * with empty strings, or cut, to the header's width.
+ * @param {string} text
+ * @returns {{headers: string[], rows: string[][]}}
+ * @throws {Error} if the text has no header row, or a quoted field is never closed
+ */
+export function parseCsvTable(text) {
+    const [headerRow, ...dataRows] = parseCsv(text);
+    if (!headerRow) {
+        throw new Error('The file is empty.');
+    }
+    const headers = headerRow.map((header) => header.trim());
+    const rows = dataRows.map((cells) => headers.map((_, index) => cells[index] ?? ''));
+    return { headers, rows };
+}
+
+/**
  * Triggers a browser file download of the given CSV string. A UTF-8 BOM is
  * prepended so Excel reads non-ASCII text correctly.
  * @param {string} filename

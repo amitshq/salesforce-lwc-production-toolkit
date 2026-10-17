@@ -1,4 +1,12 @@
-import { escapeCsvValue, neutralizeFormula, rowsToCsv, downloadCsv, exportRowsToCsv } from 'c/csvUtils';
+import {
+    escapeCsvValue,
+    neutralizeFormula,
+    rowsToCsv,
+    parseCsv,
+    parseCsvTable,
+    downloadCsv,
+    exportRowsToCsv
+} from 'c/csvUtils';
 
 const realCreateElement = document.createElement.bind(document);
 
@@ -119,6 +127,79 @@ describe('csvUtils', () => {
 
         it('can opt out of formula neutralization', () => {
             expect(rowsToCsv([{ Name: '=1+1' }], ['Name'], { neutralizeFormulas: false })).toBe('Name\r\n=1+1');
+        });
+    });
+
+    describe('parseCsv', () => {
+        it('splits simple rows and fields', () => {
+            expect(parseCsv('a,b\n1,2')).toEqual([
+                ['a', 'b'],
+                ['1', '2']
+            ]);
+        });
+
+        it('handles CRLF, LF and a trailing newline', () => {
+            expect(parseCsv('a\r\n1\r\n')).toEqual([['a'], ['1']]);
+            expect(parseCsv('a\n1\n')).toEqual([['a'], ['1']]);
+        });
+
+        it('keeps commas, doubled quotes and newlines inside quoted fields', () => {
+            expect(parseCsv('"Acme, Inc.","Say ""hi""","line1\nline2"')).toEqual([
+                ['Acme, Inc.', 'Say "hi"', 'line1\nline2']
+            ]);
+        });
+
+        it('keeps empty fields', () => {
+            expect(parseCsv('a,,c\n,,')).toEqual([
+                ['a', '', 'c'],
+                ['', '', '']
+            ]);
+        });
+
+        it('ignores a leading UTF-8 BOM', () => {
+            expect(parseCsv('﻿Name\nAcme')).toEqual([['Name'], ['Acme']]);
+        });
+
+        it('drops fully blank lines', () => {
+            expect(parseCsv('a\n\n1\n\n')).toEqual([['a'], ['1']]);
+        });
+
+        it('treats a quote in the middle of an unquoted field as literal text', () => {
+            expect(parseCsv('5" pipe,x')).toEqual([['5" pipe', 'x']]);
+        });
+
+        it('throws when a quoted field is never closed', () => {
+            expect(() => parseCsv('a,"oops\n1,2')).toThrow('never closed');
+        });
+
+        it('round-trips what rowsToCsv writes, including awkward values', () => {
+            const rows = [
+                { Name: 'Acme, Inc.', Note: 'Say "hi"' },
+                { Name: 'Line\nBreak', Note: '' }
+            ];
+            const csv = rowsToCsv(rows, ['Name', 'Note'], { neutralizeFormulas: false });
+
+            expect(parseCsv(csv)).toEqual([
+                ['Name', 'Note'],
+                ['Acme, Inc.', 'Say "hi"'],
+                ['Line\nBreak', '']
+            ]);
+        });
+    });
+
+    describe('parseCsvTable', () => {
+        it('returns trimmed headers and rows padded or cut to the header width', () => {
+            const { headers, rows } = parseCsvTable(' Name , Industry \nAcme\nGlobex,Energy,extra');
+
+            expect(headers).toEqual(['Name', 'Industry']);
+            expect(rows).toEqual([
+                ['Acme', ''],
+                ['Globex', 'Energy']
+            ]);
+        });
+
+        it('throws for an empty file', () => {
+            expect(() => parseCsvTable('')).toThrow('empty');
         });
     });
 
