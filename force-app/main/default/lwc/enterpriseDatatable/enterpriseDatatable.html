@@ -70,6 +70,15 @@
             </div>
         </template>
 
+        <template if:true={hasPendingChanges}>
+            <div class="slds-p-horizontal_medium slds-p-bottom_small">
+                <div class="slds-notify slds-notify_alert slds-theme_info slds-grid slds-grid_vertical-align-center" role="status">
+                    <span class="slds-col slds-has-flexi-truncate">{changesNotice}</span>
+                    <lightning-button label="Refresh" variant="inverse" onclick={handleRefreshClick}></lightning-button>
+                </div>
+            </div>
+        </template>
+
         <c-state-manager
             is-loading={isInitialLoading}
             has-error={hasError}
@@ -85,6 +94,7 @@
                 sorted-direction={sortedDirection}
                 onsort={handleSort}
                 draft-values={draftValues}
+                oncellchange={handleCellChange}
                 onsave={handleSave}
                 oncancel={handleCancelEdit}
                 errors={datatableErrors}

@@ -8,11 +8,16 @@ import { debounce } from 'c/functionUtils';
 import { getNestedValue } from 'c/objectUtils';
 import { getObjectAccess } from 'c/permissionUtils';
 import { notifyRecordsChanged } from 'c/recordUtils';
+import { subscribeToObjectChanges } from 'c/empUtils';
 import ConfirmDialog from 'c/confirmDialog';
 
 const DEFAULT_PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
 const BULK_DELETE_ACTION_NAME = '__bulkDelete';
+// A bulk change fires many events; wait for them to settle before reacting.
+const LIVE_CHANGE_DEBOUNCE_MS = 2000;
+// Change events reach the browser a moment after the save that caused them.
+const OWN_WRITE_WINDOW_MS = 3000;
 
 /**
  * Generic, schema-driven server-side datatable: point it at an object and a
@@ -42,6 +47,13 @@ const BULK_DELETE_ACTION_NAME = '__bulkDelete';
  *    pick one that opens by default. Views are private to each user. The key
  *    only has to be unique per table, e.g. "accounts-main". The first query
  *    waits for the default view, so the table does not load twice.
+ *  - `auto-refresh` keeps the table current: when records of the object change
+ *    (Change Data Capture must be enabled for it), a page-mode table with no
+ *    unsaved edits and nothing selected reloads quietly. Otherwise it shows a
+ *    "records changed" bar and leaves the choice to the user, so a refresh
+ *    never throws away someone's edits or selection. Changes this table just
+ *    saved itself are ignored. If the subscription cannot be made a
+ *    `liveerror` event is fired and the table carries on without live updates.
  */
 export default class EnterpriseDatatable extends LightningElement {
     @api objectApiName;
@@ -61,6 +73,7 @@ export default class EnterpriseDatatable extends LightningElement {
     @api enableConflictDetection = false;
     @api enableColumnChooser = false;
     @api viewKey;
+    @api autoRefresh = false;
     @api hideRefreshButton = false;
 
     records = [];
@@ -82,10 +95,19 @@ export default class EnterpriseDatatable extends LightningElement {
     canDeleteObject = false;
     visibleFields = null; // null = every column; otherwise the fieldNames to show
     showColumnChooser = false;
+    hasPendingChanges = false;
+    // lightning-datatable keeps in-progress cell edits to itself; cellchange is how we learn there are some.
+    hasLocalEdits = false;
+
+    isActive = false;
+    lastOwnWriteAt = 0;
+    stopWatching;
 
     _debouncedReload = debounce(() => this.loadPage(1, { append: false }), SEARCH_DEBOUNCE_MS);
+    _debouncedLiveChange = debounce(() => this.reactToLiveChange(), LIVE_CHANGE_DEBOUNCE_MS);
 
     connectedCallback() {
+        this.isActive = true;
         this.sortedBy = this.defaultSortField;
         this.sortedDirection = this.defaultSortDirection;
         if (this.viewKey) {
@@ -105,6 +127,63 @@ export default class EnterpriseDatatable extends LightningElement {
                     this.canDeleteObject = false;
                 });
         }
+
+        if (this.autoRefresh) {
+            this.startWatching();
+        }
+    }
+
+    disconnectedCallback() {
+        this.isActive = false;
+        this._debouncedLiveChange.cancel();
+        if (this.stopWatching) {
+            this.stopWatching();
+            this.stopWatching = undefined;
+        }
+    }
+
+    async startWatching() {
+        try {
+            const stop = await subscribeToObjectChanges(this.objectApiName, () => this.handleLiveChange());
+            if (this.isActive) {
+                this.stopWatching = stop;
+            } else {
+                // Removed from the page while the subscription was being made.
+                stop();
+            }
+        } catch (error) {
+            this.dispatchEvent(new CustomEvent('liveerror', { detail: { message: reduceApexErrors(error).join(' ') } }));
+        }
+    }
+
+    handleLiveChange() {
+        if (Date.now() - this.lastOwnWriteAt < OWN_WRITE_WINDOW_MS) {
+            return;
+        }
+        this._debouncedLiveChange();
+    }
+
+    reactToLiveChange() {
+        if (!this.isActive) {
+            return;
+        }
+        if (this.isLoading) {
+            // A load already under way may have read the data before this change; look again once it ends.
+            this._debouncedLiveChange();
+            return;
+        }
+        // Infinite mode would lose every page loaded so far, and drafts/selection would be discarded: ask first.
+        const canReloadQuietly = this.isPagesMode && !this.hasUnsavedEdits && this.selectedRows.length === 0;
+        if (!canReloadQuietly) {
+            this.hasPendingChanges = true;
+            return;
+        }
+        this.loadPage(this.currentPage, { append: false }).then(() => {
+            // The page we were on may no longer exist (rows deleted elsewhere): fall back to the last one.
+            if (this.records.length === 0 && this.totalCount > 0 && this.currentPage > 1) {
+                this.loadPage(this.totalPages, { append: false });
+            }
+        });
     }
 
     get isPagesMode() {
@@ -169,6 +248,20 @@ export default class EnterpriseDatatable extends LightningElement {
             label: column.label,
             value: this.columnFilters[column.fieldName] || ''
         }));
+    }
+
+    /**
+     * Reloading would swap in the latest SystemModstamp values, so an edit made against the old
+     * version would then pass conflict detection and overwrite someone else's change.
+     */
+    get hasUnsavedEdits() {
+        return this.hasLocalEdits || this.draftValues.length > 0;
+    }
+
+    get changesNotice() {
+        return this.hasUnsavedEdits
+            ? 'Records have changed. Refreshing will discard your unsaved edits.'
+            : 'Records have changed since this list was loaded.';
     }
 
     get hasViewBar() {
@@ -262,6 +355,7 @@ export default class EnterpriseDatatable extends LightningElement {
     refresh() {
         this.selectedRows = [];
         this.draftValues = [];
+        this.hasLocalEdits = false;
         this.datatableErrors = {};
         return this.loadPage(this.isInfiniteMode ? 1 : this.currentPage, { append: false });
     }
@@ -319,6 +413,7 @@ export default class EnterpriseDatatable extends LightningElement {
         this.isLoading = true;
         this.isLoadingMore = !!append;
         this.hasError = false;
+        this.hasPendingChanges = false;
 
         return queryRecords({
             objectApiName: this.objectApiName,
@@ -486,6 +581,7 @@ export default class EnterpriseDatatable extends LightningElement {
             showErrorToast(this, reduceApexErrors(error));
         } finally {
             this.isLoading = false;
+            this.lastOwnWriteAt = Date.now();
         }
     }
 
@@ -500,6 +596,10 @@ export default class EnterpriseDatatable extends LightningElement {
         return input;
     }
 
+    handleCellChange() {
+        this.hasLocalEdits = true;
+    }
+
     async handleSave(event) {
         const draftValues = event.detail.draftValues;
         this.isLoading = true;
@@ -507,6 +607,8 @@ export default class EnterpriseDatatable extends LightningElement {
 
         try {
             const results = await saveRecords({ objectApiName: this.objectApiName, records: inputs });
+            // Whatever failed is kept in draftValues below; nothing else is still being edited.
+            this.hasLocalEdits = false;
             const succeeded = results.filter((result) => result.success);
             const failed = results.filter((result) => !result.success);
             const modstampByRowKey = new Map(succeeded.filter((r) => r.modstamp != null).map((r) => [r.rowKey, r.modstamp]));
@@ -550,10 +652,12 @@ export default class EnterpriseDatatable extends LightningElement {
             showErrorToast(this, reduceApexErrors(error));
         } finally {
             this.isLoading = false;
+            this.lastOwnWriteAt = Date.now();
         }
     }
 
     handleCancelEdit() {
+        this.hasLocalEdits = false;
         this.draftValues = [];
         this.datatableErrors = {};
     }

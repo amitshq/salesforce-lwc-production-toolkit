@@ -22,6 +22,9 @@ const FALLBACK_PAGE_SIZE = 25;
  *    COUNT/SUM/AVG through GenericAggregateService
  *  - enable-column-chooser and view-key, so each user can hide columns and
  *    save, reopen and default their own views (stored in ToolkitSavedView__c)
+ *  - auto-refresh, so the table follows changes made elsewhere. It needs
+ *    Change Data Capture enabled for Account (Setup > Integrations > Change
+ *    Data Capture); without it the table just doesn't update live.
  */
 export default class EnterpriseDatatableDemo extends LightningElement {
     pageSize = FALLBACK_PAGE_SIZE;

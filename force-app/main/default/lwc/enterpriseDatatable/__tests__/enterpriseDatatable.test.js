@@ -4,6 +4,7 @@ import queryRecords from '@salesforce/apex/GenericQueryService.query';
 import saveRecords from '@salesforce/apex/GenericDmlService.saveRecords';
 import deleteRecords from '@salesforce/apex/GenericDmlService.deleteRecords';
 import getViews from '@salesforce/apex/SavedViewService.getViews';
+import { subscribeToObjectChanges } from 'c/empUtils';
 import { getObjectAccess } from 'c/permissionUtils';
 import { notifyRecordsChanged } from 'c/recordUtils';
 import ConfirmDialog from 'c/confirmDialog';
@@ -15,6 +16,7 @@ jest.mock('@salesforce/apex/SavedViewService.getViews', () => ({ default: jest.f
 jest.mock('@salesforce/apex/SavedViewService.saveView', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/SavedViewService.setDefaultView', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/SavedViewService.deleteView', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('c/empUtils', () => ({ subscribeToObjectChanges: jest.fn() }));
 
 jest.mock('c/permissionUtils', () => ({
     getObjectAccess: jest.fn(() => Promise.resolve({ isAccessible: true, isCreateable: true, isUpdateable: true, isDeletable: true }))
@@ -708,6 +710,221 @@ describe('c-enterprise-datatable', () => {
             expect(bar.viewKey).toBe('accounts-main');
             expect(bar.objectApiName).toBe('Account');
             expect(bar.currentConfig).toEqual(element.currentConfig);
+        });
+    });
+
+    describe('auto refresh', () => {
+        let stop;
+
+        // Settle promise chains while timers are faked.
+        const settle = () => jest.advanceTimersByTimeAsync(0);
+
+        function changeCallback() {
+            return subscribeToObjectChanges.mock.calls[0][1];
+        }
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+            stop = jest.fn(() => Promise.resolve());
+            subscribeToObjectChanges.mockResolvedValue(stop);
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW], { pageNumber: 2, totalCount: 60, hasMore: true }));
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('does not watch for changes unless asked to', async () => {
+            createDatatable();
+            await settle();
+
+            expect(subscribeToObjectChanges).not.toHaveBeenCalled();
+        });
+
+        it('watches the object\'s changes when auto-refresh is on', async () => {
+            createDatatable({ autoRefresh: true });
+            await settle();
+
+            expect(subscribeToObjectChanges).toHaveBeenCalledWith('Account', expect.any(Function));
+        });
+
+        it('reloads the page it is on, once, after a burst of changes settles', async () => {
+            createDatatable({ autoRefresh: true });
+            await settle();
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+
+            changeCallback()({ changeType: 'UPDATE' });
+            changeCallback()({ changeType: 'UPDATE' });
+            changeCallback()({ changeType: 'CREATE' });
+            await jest.advanceTimersByTimeAsync(1999);
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(1);
+            expect(queryRecords).toHaveBeenCalledTimes(2);
+            expect(queryRecords).toHaveBeenLastCalledWith(expect.objectContaining({ pageNumber: 2 }));
+        });
+
+        it('ignores the change events caused by its own save, but not later ones', async () => {
+            const element = createDatatable({ autoRefresh: true });
+            await settle();
+            saveRecords.mockResolvedValue([{ rowKey: '001', recordId: '001', success: true }]);
+            element.shadowRoot
+                .querySelector('lightning-datatable')
+                .dispatchEvent(new CustomEvent('save', { detail: { draftValues: [{ Id: '001', Name: 'New' }] } }));
+            await settle();
+            queryRecords.mockClear();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            await jest.advanceTimersByTimeAsync(5000);
+            expect(queryRecords).not.toHaveBeenCalled();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            await jest.advanceTimersByTimeAsync(2000);
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not reload under someone who is editing: it offers a refresh instead', async () => {
+            const element = createDatatable({ autoRefresh: true });
+            await settle();
+            element.shadowRoot.querySelector('lightning-datatable').dispatchEvent(new CustomEvent('cellchange', { detail: { draftValues: [{ Id: '001', Name: 'x' }] } }));
+            queryRecords.mockClear();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            await jest.advanceTimersByTimeAsync(2000);
+
+            expect(queryRecords).not.toHaveBeenCalled();
+            const notice = element.shadowRoot.querySelector('[role="status"]');
+            expect(notice.textContent).toContain('Records have changed');
+            expect(notice.textContent).toContain('discard your unsaved edits');
+
+            Array.from(notice.querySelectorAll('lightning-button')).find((b) => b.label === 'Refresh').click();
+            await settle();
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(element.shadowRoot.querySelector('[role="status"]')).toBeNull();
+        });
+
+        it('reloads quietly again once the edits have been saved', async () => {
+            const element = createDatatable({ autoRefresh: true });
+            await settle();
+            const datatable = element.shadowRoot.querySelector('lightning-datatable');
+            datatable.dispatchEvent(new CustomEvent('cellchange', { detail: { draftValues: [{ Id: '001', Name: 'x' }] } }));
+            saveRecords.mockResolvedValue([{ rowKey: '001', recordId: '001', success: true }]);
+            datatable.dispatchEvent(new CustomEvent('save', { detail: { draftValues: [{ Id: '001', Name: 'x' }] } }));
+            await settle();
+            await jest.advanceTimersByTimeAsync(3000);
+            queryRecords.mockClear();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            await jest.advanceTimersByTimeAsync(2000);
+
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(element.shadowRoot.querySelector('[role="status"]')).toBeNull();
+        });
+
+        it('keeps offering a refresh while a failed save leaves drafts behind', async () => {
+            const element = createDatatable({ autoRefresh: true });
+            await settle();
+            saveRecords.mockResolvedValue([{ rowKey: '001', recordId: null, success: false, message: 'Validation failed' }]);
+            element.shadowRoot
+                .querySelector('lightning-datatable')
+                .dispatchEvent(new CustomEvent('save', { detail: { draftValues: [{ Id: '001', Name: 'x' }] } }));
+            await settle();
+            await jest.advanceTimersByTimeAsync(3000);
+            queryRecords.mockClear();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            await jest.advanceTimersByTimeAsync(2000);
+
+            expect(queryRecords).not.toHaveBeenCalled();
+            expect(element.shadowRoot.querySelector('[role="status"]')).not.toBeNull();
+        });
+
+        it('does not reload under a selection: it offers a refresh instead', async () => {
+            const element = createDatatable({ autoRefresh: true, enableRowSelection: true });
+            await settle();
+            element.shadowRoot
+                .querySelector('lightning-datatable')
+                .dispatchEvent(new CustomEvent('rowselection', { detail: { selectedRows: [{ Id: '001' }] } }));
+            queryRecords.mockClear();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            await jest.advanceTimersByTimeAsync(2000);
+
+            expect(queryRecords).not.toHaveBeenCalled();
+            expect(element.shadowRoot.querySelector('[role="status"]').textContent).toContain('Records have changed');
+        });
+
+        it('offers a refresh rather than reloading in infinite mode, which would drop every loaded page', async () => {
+            const element = createDatatable({ autoRefresh: true, paginationMode: 'infinite' });
+            await settle();
+            queryRecords.mockClear();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            await jest.advanceTimersByTimeAsync(2000);
+
+            expect(queryRecords).not.toHaveBeenCalled();
+            expect(element.shadowRoot.querySelector('[role="status"]')).not.toBeNull();
+        });
+
+        it('falls back to the last page when the page it was on no longer exists', async () => {
+            queryRecords
+                .mockResolvedValueOnce(queryResult([SAMPLE_ROW], { pageNumber: 3, totalCount: 60, hasMore: false }))
+                .mockResolvedValueOnce(queryResult([], { pageNumber: 3, totalCount: 30, hasMore: false }))
+                .mockResolvedValueOnce(queryResult([SAMPLE_ROW], { pageNumber: 2, totalCount: 30, hasMore: false }));
+            createDatatable({ autoRefresh: true });
+            await settle();
+
+            changeCallback()({ changeType: 'DELETE' });
+            await jest.advanceTimersByTimeAsync(2000);
+
+            expect(queryRecords).toHaveBeenCalledTimes(3);
+            expect(queryRecords).toHaveBeenLastCalledWith(expect.objectContaining({ pageNumber: 2 }));
+        });
+
+        it('stops watching when it leaves the page, and ignores changes already waiting out the delay', async () => {
+            const element = createDatatable({ autoRefresh: true });
+            await settle();
+            queryRecords.mockClear();
+
+            changeCallback()({ changeType: 'UPDATE' });
+            document.body.removeChild(element);
+            await jest.advanceTimersByTimeAsync(5000);
+
+            expect(stop).toHaveBeenCalledTimes(1);
+            expect(queryRecords).not.toHaveBeenCalled();
+        });
+
+        it('ends a subscription that finished after it had already left the page', async () => {
+            let finishSubscribing;
+            subscribeToObjectChanges.mockReturnValue(
+                new Promise((resolve) => {
+                    finishSubscribing = resolve;
+                })
+            );
+            const element = createDatatable({ autoRefresh: true });
+            await settle();
+
+            document.body.removeChild(element);
+            finishSubscribing(stop);
+            await settle();
+
+            expect(stop).toHaveBeenCalledTimes(1);
+        });
+
+        it('tells its parent, and keeps working, when live updates cannot be set up', async () => {
+            subscribeToObjectChanges.mockRejectedValue(new Error('The requested channel does not exist.'));
+            const handler = jest.fn();
+            const element = createElement('c-enterprise-datatable', { is: EnterpriseDatatable });
+            element.objectApiName = 'Account';
+            element.columns = COLUMNS;
+            element.autoRefresh = true;
+            element.addEventListener('liveerror', handler);
+            document.body.appendChild(element);
+            await settle();
+
+            expect(handler).toHaveBeenCalledTimes(1);
+            expect(handler.mock.calls[0][0].detail.message).toContain('channel does not exist');
+            expect(element.shadowRoot.querySelector('lightning-datatable').data).toHaveLength(1);
         });
     });
 });

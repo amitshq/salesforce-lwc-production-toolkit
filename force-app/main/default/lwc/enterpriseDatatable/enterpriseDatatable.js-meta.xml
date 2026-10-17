@@ -26,6 +26,7 @@
             <property name="enableConflictDetection" type="Boolean" label="Detect Edit Conflicts" default="false" description="Reject an inline edit if someone else changed the record after it was loaded." />
             <property name="enableColumnChooser" type="Boolean" label="Enable Column Chooser" default="false" description="Let users hide and show columns." />
             <property name="viewKey" type="String" label="Saved Views Key" description="Set a key that is unique to this table (e.g. accounts-main) to turn on per-user saved views. Leave blank to turn them off." />
+            <property name="autoRefresh" type="Boolean" label="Refresh When Records Change" default="false" description="Reload when records of this object change. Requires Change Data Capture to be enabled for the object in Setup." />
             <property name="hideRefreshButton" type="Boolean" label="Hide Refresh Button" default="false" />
         </targetConfig>
     </targetConfigs>
