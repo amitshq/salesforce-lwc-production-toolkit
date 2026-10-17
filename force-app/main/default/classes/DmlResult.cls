@@ -8,6 +8,10 @@ public with sharing class DmlResult {
     @AuraEnabled public Boolean success;
     @AuraEnabled public String message;
     @AuraEnabled public List<String> fieldNames;
+    // True when the row was not saved because the record changed after the client loaded it.
+    @AuraEnabled public Boolean isConflict = false;
+    // New SystemModstamp (epoch ms) of a saved row. Only set when the caller asked for conflict checking.
+    @AuraEnabled public Long modstamp;
 
     public DmlResult(String rowKey, String recordId, Boolean success, String message, List<String> fieldNames) {
         this.rowKey = rowKey;

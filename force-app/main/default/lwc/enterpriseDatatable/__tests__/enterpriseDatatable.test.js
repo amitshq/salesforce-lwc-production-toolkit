@@ -251,4 +251,86 @@ describe('c-enterprise-datatable', () => {
         expect(queryRecords).toHaveBeenCalledTimes(1);
         expect(element.shadowRoot.querySelector('lightning-datatable').selectedRows).toEqual([]);
     });
+
+    describe('conflict detection', () => {
+        const LOADED_AT = '2024-01-01T00:00:00.000Z';
+
+        function saveDraft(element, draft) {
+            const datatable = element.shadowRoot.querySelector('lightning-datatable');
+            datatable.dispatchEvent(new CustomEvent('save', { detail: { draftValues: [draft] } }));
+            return flushPromises();
+        }
+
+        it('does not query SystemModstamp unless enabled', async () => {
+            queryRecords.mockResolvedValue(queryResult([{ Id: '001', Name: 'Acme' }]));
+            createDatatable();
+            await flushPromises();
+
+            expect(queryRecords.mock.calls[0][0].fields).not.toContain('SystemModstamp');
+        });
+
+        it('queries SystemModstamp when enabled', async () => {
+            queryRecords.mockResolvedValue(queryResult([{ Id: '001', Name: 'Acme', SystemModstamp: LOADED_AT }]));
+            createDatatable({ enableConflictDetection: true });
+            await flushPromises();
+
+            expect(queryRecords.mock.calls[0][0].fields).toContain('SystemModstamp');
+        });
+
+        it('sends the loaded SystemModstamp as expectedModstamp on save', async () => {
+            queryRecords.mockResolvedValue(queryResult([{ Id: '001', Name: 'Acme', SystemModstamp: LOADED_AT }]));
+            const element = createDatatable({ enableConflictDetection: true });
+            await flushPromises();
+            saveRecords.mockResolvedValue([{ rowKey: '001', success: true }]);
+
+            await saveDraft(element, { Id: '001', Name: 'New' });
+
+            expect(saveRecords).toHaveBeenCalledWith({
+                objectApiName: 'Account',
+                records: [{ rowKey: '001', fields: { Id: '001', Name: 'New' }, expectedModstamp: Date.parse(LOADED_AT) }]
+            });
+        });
+
+        it('does not send expectedModstamp when disabled', async () => {
+            queryRecords.mockResolvedValue(queryResult([{ Id: '001', Name: 'Acme', SystemModstamp: LOADED_AT }]));
+            const element = createDatatable();
+            await flushPromises();
+            saveRecords.mockResolvedValue([{ rowKey: '001', success: true }]);
+
+            await saveDraft(element, { Id: '001', Name: 'New' });
+
+            expect(saveRecords.mock.calls[0][0].records[0]).not.toHaveProperty('expectedModstamp');
+        });
+
+        it('uses the modstamp returned by a successful save for the next edit of that row', async () => {
+            queryRecords.mockResolvedValue(queryResult([{ Id: '001', Name: 'Acme', SystemModstamp: LOADED_AT }]));
+            const element = createDatatable({ enableConflictDetection: true });
+            await flushPromises();
+
+            saveRecords.mockResolvedValueOnce([{ rowKey: '001', success: true, modstamp: 1700000000000 }]);
+            await saveDraft(element, { Id: '001', Name: 'First' });
+            saveRecords.mockResolvedValueOnce([{ rowKey: '001', success: true, modstamp: 1700000005000 }]);
+            await saveDraft(element, { Id: '001', Name: 'Second' });
+
+            expect(saveRecords.mock.calls[1][0].records[0].expectedModstamp).toBe(1700000000000);
+        });
+
+        it('keeps a conflicting row as a draft with its error and says it was changed by someone else', async () => {
+            queryRecords.mockResolvedValue(queryResult([{ Id: '001', Name: 'Acme', SystemModstamp: LOADED_AT }]));
+            const element = createDatatable({ enableConflictDetection: true });
+            await flushPromises();
+            const toastHandler = jest.fn();
+            element.addEventListener('lightning__showtoast', toastHandler);
+            saveRecords.mockResolvedValue([
+                { rowKey: '001', success: false, isConflict: true, message: 'This record was changed by someone else.' }
+            ]);
+
+            await saveDraft(element, { Id: '001', Name: 'Mine' });
+
+            const datatable = element.shadowRoot.querySelector('lightning-datatable');
+            expect(datatable.draftValues).toEqual([{ Id: '001', Name: 'Mine' }]);
+            expect(datatable.errors.rows['001'].messages).toEqual(['This record was changed by someone else.']);
+            expect(toastHandler.mock.calls[0][0].detail.message).toContain('1 changed by someone else');
+        });
+    });
 });

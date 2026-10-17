@@ -49,6 +49,7 @@ export default class EnterpriseDatatable extends LightningElement {
     @api enableRowSelection = false;
     @api bulkActions = [];
     @api enableBulkDelete = false;
+    @api enableConflictDetection = false;
     @api hideRefreshButton = false;
 
     records = [];
@@ -150,6 +151,9 @@ export default class EnterpriseDatatable extends LightningElement {
                 fields.add(column.fieldName);
             }
         });
+        if (this.enableConflictDetection) {
+            fields.add('SystemModstamp');
+        }
         return Array.from(fields);
     }
 
@@ -346,24 +350,42 @@ export default class EnterpriseDatatable extends LightningElement {
         }
     }
 
+    buildSaveInput(draft) {
+        const input = { rowKey: draft[this.keyField], fields: { ...draft } };
+        if (this.enableConflictDetection) {
+            const loaded = this.records.find((record) => record[this.keyField] === draft[this.keyField]);
+            if (loaded && loaded.SystemModstamp !== undefined && loaded.SystemModstamp !== null) {
+                input.expectedModstamp = new Date(loaded.SystemModstamp).getTime();
+            }
+        }
+        return input;
+    }
+
     async handleSave(event) {
         const draftValues = event.detail.draftValues;
         this.isLoading = true;
-        const inputs = draftValues.map((draft) => ({ rowKey: draft[this.keyField], fields: { ...draft } }));
+        const inputs = draftValues.map((draft) => this.buildSaveInput(draft));
 
         try {
             const results = await saveRecords({ objectApiName: this.objectApiName, records: inputs });
             const succeeded = results.filter((result) => result.success);
             const failed = results.filter((result) => !result.success);
+            const modstampByRowKey = new Map(succeeded.filter((r) => r.modstamp != null).map((r) => [r.rowKey, r.modstamp]));
 
             if (succeeded.length) {
                 const succeededRowKeys = new Set(succeeded.map((result) => result.rowKey));
                 this.records = this.records.map((record) => {
-                    if (!succeededRowKeys.has(record[this.keyField])) {
+                    const rowKey = record[this.keyField];
+                    if (!succeededRowKeys.has(rowKey)) {
                         return record;
                     }
-                    const draft = draftValues.find((d) => d[this.keyField] === record[this.keyField]);
-                    return { ...record, ...draft };
+                    const draft = draftValues.find((d) => d[this.keyField] === rowKey);
+                    const updated = { ...record, ...draft };
+                    if (modstampByRowKey.has(rowKey)) {
+                        // Next edit of this row must be checked against the version we just wrote.
+                        updated.SystemModstamp = modstampByRowKey.get(rowKey);
+                    }
+                    return updated;
                 });
             }
 
@@ -371,7 +393,11 @@ export default class EnterpriseDatatable extends LightningElement {
                 this.datatableErrors = buildDatatableErrors(failed);
                 const failedRowKeys = new Set(failed.map((result) => result.rowKey));
                 this.draftValues = draftValues.filter((draft) => failedRowKeys.has(draft[this.keyField]));
-                showErrorToast(this, `${succeeded.length} saved, ${failed.length} failed.`);
+                const conflictCount = failed.filter((result) => result.isConflict).length;
+                const conflictNote = conflictCount
+                    ? ` ${conflictCount} changed by someone else - refresh to see the latest.`
+                    : '';
+                showErrorToast(this, `${succeeded.length} saved, ${failed.length} failed.${conflictNote}`);
             } else {
                 this.datatableErrors = {};
                 this.draftValues = [];

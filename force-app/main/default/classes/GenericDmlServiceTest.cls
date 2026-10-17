@@ -106,7 +106,7 @@ private class GenericDmlServiceTest {
             byRowKey.put(result.rowKey, result);
         }
 
-        System.assertEquals(true, byRowKey.get(toDelete.Id).success);
+        System.assertEquals(true, byRowKey.get(String.valueOf(toDelete.Id)).success);
         System.assertEquals(false, byRowKey.get(String.valueOf(missingId)).success);
         System.assertEquals(0, [SELECT COUNT() FROM Account WHERE Id = :toDelete.Id]);
     }
@@ -119,5 +119,83 @@ private class GenericDmlServiceTest {
 
         System.assertEquals(1, results.size());
         System.assertEquals(false, results[0].success);
+    }
+
+    @IsTest
+    static void rejectsAnUpdateWhenTheRecordChangedSinceItWasLoaded() {
+        Account account = new Account(Name = 'Original');
+        insert account;
+        Long currentStamp = [SELECT SystemModstamp FROM Account WHERE Id = :account.Id].SystemModstamp.getTime();
+
+        DmlRecordInput input = new DmlRecordInput(account.Id, new Map<String, Object>{ 'Id' => account.Id, 'Name' => 'Stale Edit' });
+        input.expectedModstamp = currentStamp - 60000;
+
+        Test.startTest();
+        List<DmlResult> results = GenericDmlService.saveRecords('Account', new List<DmlRecordInput>{ input });
+        Test.stopTest();
+
+        System.assertEquals(false, results[0].success);
+        System.assertEquals(true, results[0].isConflict);
+        System.assertEquals('Original', [SELECT Name FROM Account WHERE Id = :account.Id].Name, 'The stale edit must not be applied.');
+    }
+
+    @IsTest
+    static void appliesAnUpdateWhenTheLoadedVersionIsStillCurrent() {
+        Account account = new Account(Name = 'Original');
+        insert account;
+        Long currentStamp = [SELECT SystemModstamp FROM Account WHERE Id = :account.Id].SystemModstamp.getTime();
+
+        DmlRecordInput input = new DmlRecordInput(account.Id, new Map<String, Object>{ 'Id' => account.Id, 'Name' => 'Fresh Edit' });
+        input.expectedModstamp = currentStamp;
+
+        Test.startTest();
+        List<DmlResult> results = GenericDmlService.saveRecords('Account', new List<DmlRecordInput>{ input });
+        Test.stopTest();
+
+        System.assertEquals(true, results[0].success);
+        System.assertEquals(false, results[0].isConflict);
+        System.assertNotEquals(null, results[0].modstamp, 'A checked save returns the record\'s new modstamp for the next edit.');
+        System.assertEquals('Fresh Edit', [SELECT Name FROM Account WHERE Id = :account.Id].Name);
+    }
+
+    @IsTest
+    static void conflictCheckingIsSkippedWhenNoExpectedModstampIsGiven() {
+        Account account = new Account(Name = 'Original');
+        insert account;
+
+        DmlRecordInput input = new DmlRecordInput(account.Id, new Map<String, Object>{ 'Id' => account.Id, 'Name' => 'Unchecked Edit' });
+
+        Test.startTest();
+        List<DmlResult> results = GenericDmlService.saveRecords('Account', new List<DmlRecordInput>{ input });
+        Test.stopTest();
+
+        System.assertEquals(true, results[0].success);
+        System.assertEquals(null, results[0].modstamp, 'No extra query or modstamp when conflict checking was not requested.');
+    }
+
+    @IsTest
+    static void aConflictOnOneRowDoesNotBlockTheOthers() {
+        Account stale = new Account(Name = 'Stale Row');
+        Account fine = new Account(Name = 'Fine Row');
+        insert new List<Account>{ stale, fine };
+        Long staleStamp = [SELECT SystemModstamp FROM Account WHERE Id = :stale.Id].SystemModstamp.getTime() - 60000;
+        Long fineStamp = [SELECT SystemModstamp FROM Account WHERE Id = :fine.Id].SystemModstamp.getTime();
+
+        DmlRecordInput staleInput = new DmlRecordInput(stale.Id, new Map<String, Object>{ 'Id' => stale.Id, 'Name' => 'Stale Edit' });
+        staleInput.expectedModstamp = staleStamp;
+        DmlRecordInput fineInput = new DmlRecordInput(fine.Id, new Map<String, Object>{ 'Id' => fine.Id, 'Name' => 'Fine Edit' });
+        fineInput.expectedModstamp = fineStamp;
+
+        Test.startTest();
+        List<DmlResult> results = GenericDmlService.saveRecords('Account', new List<DmlRecordInput>{ staleInput, fineInput });
+        Test.stopTest();
+
+        Map<String, DmlResult> byRowKey = new Map<String, DmlResult>();
+        for (DmlResult result : results) {
+            byRowKey.put(result.rowKey, result);
+        }
+        System.assertEquals(true, byRowKey.get(String.valueOf(stale.Id)).isConflict);
+        System.assertEquals(true, byRowKey.get(String.valueOf(fine.Id)).success);
+        System.assertEquals('Fine Edit', [SELECT Name FROM Account WHERE Id = :fine.Id].Name);
     }
 }
