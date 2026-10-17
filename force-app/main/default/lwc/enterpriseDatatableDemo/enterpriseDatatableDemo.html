@@ -1,4 +1,38 @@
 <template>
+    <div class="slds-grid slds-wrap slds-gutters slds-p-bottom_small">
+        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-4 slds-p-bottom_x-small">
+            <c-aggregate-kpi-card label="Accounts" object-api-name="Account" icon-name="standard:account"></c-aggregate-kpi-card>
+        </div>
+        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-4 slds-p-bottom_x-small">
+            <c-aggregate-kpi-card
+                label="Technology accounts"
+                object-api-name="Account"
+                filters={technologyFilters}
+                icon-name="standard:account"
+            ></c-aggregate-kpi-card>
+        </div>
+        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-4 slds-p-bottom_x-small">
+            <c-aggregate-kpi-card
+                label="Total annual revenue"
+                object-api-name="Account"
+                function-name="SUM"
+                field-name="AnnualRevenue"
+                format="currency"
+                icon-name="standard:currency"
+            ></c-aggregate-kpi-card>
+        </div>
+        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-4 slds-p-bottom_x-small">
+            <c-aggregate-kpi-card
+                label="Average annual revenue"
+                object-api-name="Account"
+                function-name="AVG"
+                field-name="AnnualRevenue"
+                format="currency"
+                icon-name="standard:calculated_insights"
+            ></c-aggregate-kpi-card>
+        </div>
+    </div>
+
     <div class="slds-grid slds-grid_align-end slds-p-bottom_x-small">
         <lightning-button label="Import CSV" icon-name="utility:upload" onclick={handleImportClick}></lightning-button>
     </div>

@@ -18,6 +18,8 @@ const FALLBACK_PAGE_SIZE = 25;
  *  - enable-conflict-detection, so an inline edit is rejected (not silently
  *    overwritten) if someone else changed the record after it was loaded
  *  - c-csv-import-wizard in a c-modal, refreshing the table when it finishes
+ *  - c-aggregate-kpi-card tiles above the table, each computing its own
+ *    COUNT/SUM/AVG through GenericAggregateService
  */
 export default class EnterpriseDatatableDemo extends LightningElement {
     pageSize = FALLBACK_PAGE_SIZE;
@@ -32,6 +34,8 @@ export default class EnterpriseDatatableDemo extends LightningElement {
     ];
 
     searchFields = ['Name', 'Industry'];
+
+    technologyFilters = [{ fieldName: 'Industry', operatorName: '=', value: 'Technology' }];
 
     bulkActions = [{ name: 'export', label: 'Export CSV', iconName: 'utility:download' }];
 

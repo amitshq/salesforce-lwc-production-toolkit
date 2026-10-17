@@ -1,0 +1,24 @@
+<template>
+    <div class="wrapper" aria-busy={isLoading}>
+        <template if:true={hasError}>
+            <div class="slds-box slds-theme_error slds-text-body_small" role="alert">
+                <strong>{cardLabel}:</strong> {errorMessage}
+            </div>
+        </template>
+        <template if:false={hasError}>
+            <c-kpi-card
+                label={cardLabel}
+                value={value}
+                format={format}
+                currency-code={currencyCode}
+                trend={trend}
+                trend-label={trendLabel}
+                icon-name={iconName}
+                variant={variant}
+            ></c-kpi-card>
+        </template>
+        <template if:true={isLoading}>
+            <lightning-spinner alternative-text="Loading" size="small"></lightning-spinner>
+        </template>
+    </div>
+</template>
