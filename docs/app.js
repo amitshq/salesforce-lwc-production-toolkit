@@ -300,10 +300,11 @@ const CATALOG = [
     usage:
       "import { exportRowsToCsv } from 'c/csvUtils';\n\nexportRowsToCsv(selectedRows, this.columns, 'accounts-export.csv');",
     functions: [
-      ['escapeCsvValue(value)', 'Quotes fields that contain commas, quotes, or newlines.'],
-      ['rowsToCsv(rows, columns)', 'Builds a CSV string from rows + datatable-style columns.'],
-      ['downloadCsv(filename, csvContent)', 'Triggers a browser file download.'],
-      ['exportRowsToCsv(rows, columns, filename?)', 'rowsToCsv + downloadCsv; returns the CSV content.']
+      ['escapeCsvValue(value)', 'Quotes fields that contain commas, quotes, or newlines; Dates become ISO strings, arrays join with "; ".'],
+      ['neutralizeFormula(value)', "Prefixes text starting with = + - @ with a quote so spreadsheets don't run it as a formula."],
+      ['rowsToCsv(rows, columns, options?)', 'CRLF-separated CSV from rows + datatable-style columns; skips action columns, reads nested relationships.'],
+      ['downloadCsv(filename, csvContent)', 'Triggers a browser download, with a UTF-8 BOM so Excel reads non-ASCII text.'],
+      ['exportRowsToCsv(rows, columns, filename?, options?)', 'rowsToCsv + downloadCsv; returns the CSV content.']
     ]
   },
   {

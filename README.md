@@ -38,7 +38,7 @@ npm run lint         # ESLint
 npm run prettier     # format everything
 ```
 
-201 Jest tests and 24 Apex test methods cover the components and services below.
+220 Jest tests and 24 Apex test methods cover the components and services below.
 
 ## Architecture
 

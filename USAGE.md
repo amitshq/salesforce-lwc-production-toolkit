@@ -33,6 +33,7 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [functionUtils](#functionutils)
   - [objectUtils](#objectutils)
   - [jsonUtils](#jsonutils)
+  - [csvUtils](#csvutils)
   - [urlUtils](#urlutils)
 - [Salesforce utility modules](#salesforce-utility-modules)
   - [apexErrorUtils](#apexerrorutils)
@@ -667,15 +668,20 @@ import { deepClone, isEqual, getNestedValue, setNestedValue } from 'c/objectUtil
 ### csvUtils
 
 ```js
-import { escapeCsvValue, rowsToCsv, downloadCsv, exportRowsToCsv } from 'c/csvUtils';
+import { escapeCsvValue, neutralizeFormula, rowsToCsv, downloadCsv, exportRowsToCsv } from 'c/csvUtils';
+
+exportRowsToCsv(selectedRows, this.columns, 'accounts-export.csv');
 ```
 
 | Function | Signature | Description |
 |---|---|---|
-| `escapeCsvValue` | `(value) => String` | RFC 4180 escaping: quotes fields that contain commas, quotes, or newlines. |
-| `rowsToCsv` | `(rows, columns) => String` | Builds a CSV string from row objects and datatable-style columns (`{ label, fieldName }`) or plain field-name strings. Relationship paths (`Owner.Name`) read the flattened `Owner_Name` alias first. |
-| `downloadCsv` | `(filename, csvContent) => void` | Triggers a browser file download of the given CSV string. |
-| `exportRowsToCsv` | `(rows, columns, filename = 'export.csv') => String` | Convenience wrapper: `rowsToCsv` + `downloadCsv`; returns the CSV content. |
+| `escapeCsvValue` | `(value) => String` | RFC 4180 escaping: quotes fields that contain commas, quotes, or newlines. Dates become ISO strings, arrays are joined with `"; "`, other objects are JSON-encoded. |
+| `neutralizeFormula` | `(value) => any` | Prefixes a string starting with `=`, `+`, `-`, `@`, tab or CR with a single quote so a spreadsheet opens it as text instead of running it. Non-strings and plain numeric strings (`"-5"`) are left alone. |
+| `rowsToCsv` | `(rows, columns, { neutralizeFormulas = true }?) => String` | Builds a CSV string (CRLF-separated) from row objects and datatable-style columns (`{ label, fieldName }`) or plain field-name strings. Columns without a `fieldName` (row-action/button columns) are skipped. Relationship paths (`Owner.Name`) are read from the flattened `Owner_Name` alias, then from the nested object (`row.Owner.Name`) as Apex returns it. |
+| `downloadCsv` | `(filename, csvContent) => void` | Triggers a browser file download. A UTF-8 BOM is prepended so Excel reads non-ASCII text correctly. |
+| `exportRowsToCsv` | `(rows, columns, filename = 'export.csv', options?) => String` | Convenience wrapper: `rowsToCsv` + `downloadCsv`; returns the CSV content. |
+
+Formula neutralization is on by default because exported Salesforce text is user-entered. The cost is that a text value such as a phone number `+1 (555) 123-4567` is exported as `'+1 (555) 123-4567`; pass `{ neutralizeFormulas: false }` if the file will not be opened in a spreadsheet.
 
 `c-enterprise-datatable-demo` uses this for its **Export CSV** bulk action.
 
@@ -975,7 +981,7 @@ Backs `c-file-upload-manager`. Reads/deletes `ContentDocument`/`ContentDocumentL
 
 ```bash
 npm install
-npm test             # Jest — 190 tests across every LWC/util module
+npm test             # Jest — 220 tests across every LWC/util module
 npm run lint          # ESLint
 ```
 
