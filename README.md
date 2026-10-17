@@ -1,6 +1,6 @@
 # salesforce-lwc-production-toolkit
 
-**[Website](https://amitshq.github.io/salesforce-lwc-production-toolkit/)** &middot; **[Usage guide](USAGE.md)**
+**[Website](https://amitshq.github.io/salesforce-lwc-production-toolkit/)** &middot; **[Usage guide](USAGE.md)** &middot; **[Contributing](CONTRIBUTING.md)** (PRs go to `dev`)
 
 Reusable, production-grade Lightning Web Components and Apex services for the pieces every Salesforce project ends up rebuilding: a generic server-side datatable, a modal framework, error/state handling, and the small utility functions that don't deserve a bespoke implementation per project.
 

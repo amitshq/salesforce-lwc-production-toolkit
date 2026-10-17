@@ -1,0 +1,29 @@
+name: Block pull requests to main
+
+# main only ever changes by the repository owner. Contributors target `dev`.
+# GitHub has no setting that stops a PR being opened against a branch, so this
+# closes it straight away with an explanation.
+#
+# pull_request_target runs the copy of this file that lives on the PR's BASE
+# branch (main), so it must exist on main to take effect. It never checks out
+# or runs code from the PR, which is what makes that trigger safe here.
+on:
+  pull_request_target:
+    types: [opened, reopened, edited]
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  block:
+    if: github.event.pull_request.user.login != github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Thanks for the contribution. Pull requests to \`main\` are not accepted on this repository - please retarget this change to the \`dev\` branch (use **Edit** at the top of the PR to change the base branch, or reopen it against \`dev\`). See CONTRIBUTING.md."
+          gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
