@@ -1,0 +1,53 @@
+<template>
+    <div class="slds-p-horizontal_medium slds-p-bottom_small">
+        <div class="slds-grid slds-wrap slds-grid_vertical-align-end slds-gutters_x-small">
+            <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3 slds-p-bottom_x-small">
+                <lightning-combobox
+                    label="View"
+                    variant="label-stacked"
+                    options={viewOptions}
+                    value={selectedId}
+                    disabled={isBusy}
+                    onchange={handleSelect}
+                ></lightning-combobox>
+            </div>
+            <div class="slds-col slds-p-bottom_x-small">
+                <template if:true={isModified}>
+                    <span class="slds-badge slds-badge_lightest slds-m-right_x-small">Unsaved changes</span>
+                    <lightning-button label="Update view" disabled={isBusy} onclick={handleUpdate}></lightning-button>
+                </template>
+                <lightning-button label="Save as new view" disabled={isBusy} onclick={handleSaveNewClick}></lightning-button>
+                <template if:true={hasSelection}>
+                    <lightning-button label={defaultButtonLabel} variant="base" disabled={isBusy} onclick={handleToggleDefault}></lightning-button>
+                    <lightning-button label="Delete view" variant="base" disabled={isBusy} onclick={handleDelete}></lightning-button>
+                </template>
+            </div>
+        </div>
+
+        <template if:true={showSaveForm}>
+            <div class="slds-box slds-box_x-small slds-m-top_x-small">
+                <lightning-input
+                    label="View name"
+                    value={saveName}
+                    maxlength="80"
+                    required
+                    onchange={handleNameChange}
+                ></lightning-input>
+                <lightning-input
+                    type="checkbox"
+                    label="Open this view by default"
+                    checked={saveAsDefault}
+                    onchange={handleDefaultCheckboxChange}
+                ></lightning-input>
+                <div class="slds-m-top_x-small">
+                    <lightning-button label="Cancel" onclick={handleSaveCancel}></lightning-button>
+                    <lightning-button label="Save view" variant="brand" disabled={saveDisabled} onclick={handleSaveSubmit}></lightning-button>
+                </div>
+            </div>
+        </template>
+
+        <template if:true={hasError}>
+            <div class="slds-text-color_error slds-m-top_x-small" role="alert">{errorMessage}</div>
+        </template>
+    </div>
+</template>

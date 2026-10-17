@@ -27,6 +27,10 @@
         <apexClass>FileManagerService</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>SavedViewService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <customPermissions>
         <enabled>true</enabled>
         <name>Toolkit_Bulk_Edit</name>
@@ -43,4 +47,33 @@
         <field>ToolkitDemoSetting__mdt.DefaultPageSize__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>ToolkitSavedView__c.ViewKey__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>ToolkitSavedView__c.ObjectApiName__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>ToolkitSavedView__c.Config__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>ToolkitSavedView__c.IsDefault__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <objectPermissions>
+        <allowCreate>true</allowCreate>
+        <allowDelete>true</allowDelete>
+        <allowEdit>true</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <object>ToolkitSavedView__c</object>
+        <viewAllRecords>false</viewAllRecords>
+    </objectPermissions>
 </PermissionSet>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>IsDefault__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>When checked, this view is applied automatically when its table loads. SavedViewService keeps at most one default per user and view key.</description>
+    <externalId>false</externalId>
+    <label>Is Default</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>

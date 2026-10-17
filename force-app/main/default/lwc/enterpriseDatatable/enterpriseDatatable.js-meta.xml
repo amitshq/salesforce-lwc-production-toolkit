@@ -23,6 +23,9 @@
             />
             <property name="enableRowSelection" type="Boolean" label="Enable Row Selection" default="false" />
             <property name="enableBulkDelete" type="Boolean" label="Enable Bulk Delete" default="false" />
+            <property name="enableConflictDetection" type="Boolean" label="Detect Edit Conflicts" default="false" description="Reject an inline edit if someone else changed the record after it was loaded." />
+            <property name="enableColumnChooser" type="Boolean" label="Enable Column Chooser" default="false" description="Let users hide and show columns." />
+            <property name="viewKey" type="String" label="Saved Views Key" description="Set a key that is unique to this table (e.g. accounts-main) to turn on per-user saved views. Leave blank to turn them off." />
             <property name="hideRefreshButton" type="Boolean" label="Hide Refresh Button" default="false" />
         </targetConfig>
     </targetConfigs>

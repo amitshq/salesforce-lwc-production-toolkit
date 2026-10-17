@@ -3,6 +3,7 @@ import EnterpriseDatatable from 'c/enterpriseDatatable';
 import queryRecords from '@salesforce/apex/GenericQueryService.query';
 import saveRecords from '@salesforce/apex/GenericDmlService.saveRecords';
 import deleteRecords from '@salesforce/apex/GenericDmlService.deleteRecords';
+import getViews from '@salesforce/apex/SavedViewService.getViews';
 import { getObjectAccess } from 'c/permissionUtils';
 import { notifyRecordsChanged } from 'c/recordUtils';
 import ConfirmDialog from 'c/confirmDialog';
@@ -10,6 +11,10 @@ import ConfirmDialog from 'c/confirmDialog';
 jest.mock('@salesforce/apex/GenericQueryService.query', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/GenericDmlService.saveRecords', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/GenericDmlService.deleteRecords', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/SavedViewService.getViews', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/SavedViewService.saveView', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/SavedViewService.setDefaultView', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/SavedViewService.deleteView', () => ({ default: jest.fn() }), { virtual: true });
 
 jest.mock('c/permissionUtils', () => ({
     getObjectAccess: jest.fn(() => Promise.resolve({ isAccessible: true, isCreateable: true, isUpdateable: true, isDeletable: true }))
@@ -28,6 +33,8 @@ const COLUMNS = [
     { label: 'Name', fieldName: 'Name', type: 'text', editable: true, filterable: true },
     { label: 'Industry', fieldName: 'Industry', type: 'text' }
 ];
+
+const SAMPLE_ROW = { Id: '001', Name: 'Acme', Industry: 'Tech', Phone: '555-0100' };
 
 function queryResult(records, overrides = {}) {
     return { records, totalCount: records.length, pageNumber: 1, pageSize: 25, hasMore: false, ...overrides };
@@ -331,6 +338,376 @@ describe('c-enterprise-datatable', () => {
             expect(datatable.draftValues).toEqual([{ Id: '001', Name: 'Mine' }]);
             expect(datatable.errors.rows['001'].messages).toEqual(['This record was changed by someone else.']);
             expect(toastHandler.mock.calls[0][0].detail.message).toContain('1 changed by someone else');
+        });
+    });
+
+    describe('sorting a relationship column', () => {
+        it('shows the flattened alias in the header but sends the real path to the server', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({
+                columns: [...COLUMNS, { label: 'Owner', fieldName: 'Owner.Name', type: 'text', sortable: true }]
+            });
+            await flushPromises();
+
+            const datatable = element.shadowRoot.querySelector('lightning-datatable');
+            datatable.dispatchEvent(new CustomEvent('sort', { detail: { fieldName: 'Owner_Name', sortDirection: 'desc' } }));
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenLastCalledWith(expect.objectContaining({ sortField: 'Owner.Name', sortDirection: 'desc' }));
+            expect(element.shadowRoot.querySelector('lightning-datatable').sortedBy).toBe('Owner_Name');
+        });
+
+        it('shows a default sort on a relationship column against its alias', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({
+                columns: [...COLUMNS, { label: 'Owner', fieldName: 'Owner.Name', type: 'text', sortable: true }],
+                defaultSortField: 'Owner.Name'
+            });
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledWith(expect.objectContaining({ sortField: 'Owner.Name' }));
+            expect(element.shadowRoot.querySelector('lightning-datatable').sortedBy).toBe('Owner_Name');
+        });
+    });
+
+    describe('column chooser', () => {
+        const THREE_COLUMNS = [...COLUMNS, { label: 'Phone', fieldName: 'Phone', type: 'phone' }];
+
+        function chooserButton(element) {
+            return Array.from(element.shadowRoot.querySelectorAll('lightning-button-icon')).find(
+                (button) => button.alternativeText === 'Choose columns'
+            );
+        }
+
+        function chooserCheckboxes(element) {
+            return Array.from(element.shadowRoot.querySelector('c-column-chooser').shadowRoot.querySelectorAll('lightning-input'));
+        }
+
+        function tableFieldNames(element) {
+            return element.shadowRoot.querySelector('lightning-datatable').columns.map((column) => column.fieldName);
+        }
+
+        it('is not offered unless enabled', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS });
+            await flushPromises();
+
+            expect(chooserButton(element)).toBeUndefined();
+        });
+
+        it('opens a panel, and unchecking a column hides it without another query', async () => {
+            queryRecords.mockResolvedValue(queryResult([{ Id: '1', Name: 'Acme', Industry: 'Tech', Phone: '555' }]));
+            const element = createDatatable({ columns: THREE_COLUMNS, enableColumnChooser: true });
+            await flushPromises();
+            expect(element.shadowRoot.querySelector('c-column-chooser')).toBeNull();
+
+            chooserButton(element).click();
+            await flushPromises();
+            const industry = chooserCheckboxes(element)[1];
+            industry.checked = false;
+            industry.dispatchEvent(new CustomEvent('change'));
+            await flushPromises();
+
+            expect(tableFieldNames(element)).toEqual(['Name', 'Phone']);
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(element.currentConfig.columns).toEqual(['Name', 'Phone']);
+        });
+
+        it('still queries every column, so a hidden one is ready the moment it is shown again', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS, enableColumnChooser: true });
+            await flushPromises();
+
+            chooserButton(element).click();
+            await flushPromises();
+            const phone = chooserCheckboxes(element)[2];
+            phone.checked = false;
+            phone.dispatchEvent(new CustomEvent('change'));
+            await flushPromises();
+            element.refresh();
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenLastCalledWith(expect.objectContaining({ fields: expect.arrayContaining(['Phone']) }));
+        });
+
+        it('returns to "all columns" once everything is checked again', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS, enableColumnChooser: true });
+            await flushPromises();
+            chooserButton(element).click();
+            await flushPromises();
+
+            const industry = chooserCheckboxes(element)[1];
+            industry.checked = false;
+            industry.dispatchEvent(new CustomEvent('change'));
+            await flushPromises();
+            const again = chooserCheckboxes(element)[1];
+            again.checked = true;
+            again.dispatchEvent(new CustomEvent('change'));
+            await flushPromises();
+
+            expect(tableFieldNames(element)).toEqual(['Name', 'Industry', 'Phone']);
+            expect(element.currentConfig.columns).toBeNull();
+        });
+
+        it('never hides row-action columns, which have no field name', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const actionColumn = { type: 'action', typeAttributes: { rowActions: [] } };
+            const element = createDatatable({ columns: [...THREE_COLUMNS, actionColumn], enableColumnChooser: true });
+            await flushPromises();
+            chooserButton(element).click();
+            await flushPromises();
+
+            const phone = chooserCheckboxes(element)[2];
+            phone.checked = false;
+            phone.dispatchEvent(new CustomEvent('change'));
+            await flushPromises();
+
+            expect(element.shadowRoot.querySelector('lightning-datatable').columns).toHaveLength(3);
+            expect(element.shadowRoot.querySelector('lightning-datatable').columns[2].type).toBe('action');
+        });
+    });
+
+    describe('currentConfig and applyConfig', () => {
+        const THREE_COLUMNS = [
+            { label: 'Name', fieldName: 'Name', type: 'text', filterable: true },
+            { label: 'Industry', fieldName: 'Industry', type: 'text', filterable: true },
+            { label: 'Phone', fieldName: 'Phone', type: 'phone' }
+        ];
+
+        it('describes the default layout', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS, defaultSortField: 'Name', defaultSortDirection: 'asc' });
+            await flushPromises();
+
+            expect(element.currentConfig).toEqual({
+                v: 1,
+                columns: null,
+                sortedBy: 'Name',
+                sortedDirection: 'asc',
+                searchTerm: '',
+                columnFilters: {}
+            });
+        });
+
+        it('picks up typed search text and column filters, leaving out empty filters', async () => {
+            jest.useFakeTimers();
+            try {
+                queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+                const element = createDatatable({ columns: THREE_COLUMNS, searchFields: ['Name'] });
+                await Promise.resolve();
+
+                const search = Array.from(element.shadowRoot.querySelectorAll('lightning-input')).find((input) => input.type === 'search');
+                search.value = 'acme';
+                search.dispatchEvent(new CustomEvent('change'));
+                const filter = Array.from(element.shadowRoot.querySelectorAll('lightning-input')).find((input) => input.label === 'Industry');
+                filter.value = 'Tech';
+                filter.dispatchEvent(new CustomEvent('change'));
+                const cleared = Array.from(element.shadowRoot.querySelectorAll('lightning-input')).find((input) => input.label === 'Name');
+                cleared.value = '';
+                cleared.dispatchEvent(new CustomEvent('change'));
+
+                expect(element.currentConfig.searchTerm).toBe('acme');
+                expect(element.currentConfig.columnFilters).toEqual({ Industry: 'Tech' });
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it('applies columns, sort, search and filters, then queries page 1 with them', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS, searchFields: ['Name'] });
+            await flushPromises();
+            queryRecords.mockClear();
+
+            element.applyConfig({
+                v: 1,
+                columns: ['Name', 'Phone'],
+                sortedBy: 'Industry',
+                sortedDirection: 'desc',
+                searchTerm: 'acme',
+                columnFilters: { Industry: 'Tech' }
+            });
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(queryRecords).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    pageNumber: 1,
+                    sortField: 'Industry',
+                    sortDirection: 'desc',
+                    searchTerm: 'acme',
+                    filters: [{ fieldName: 'Industry', operatorName: '=', value: 'Tech' }]
+                })
+            );
+            expect(element.shadowRoot.querySelector('lightning-datatable').columns.map((c) => c.fieldName)).toEqual(['Name', 'Phone']);
+        });
+
+        it('shows the applied search text and filter values in their inputs', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS, searchFields: ['Name'] });
+            await flushPromises();
+
+            element.applyConfig({ searchTerm: 'acme', columnFilters: { Industry: 'Tech' } });
+            await flushPromises();
+
+            const inputs = Array.from(element.shadowRoot.querySelectorAll('lightning-input'));
+            expect(inputs.find((input) => input.type === 'search').value).toBe('acme');
+            expect(inputs.find((input) => input.label === 'Industry').value).toBe('Tech');
+            expect(inputs.find((input) => input.label === 'Name').value).toBe('');
+        });
+
+        it('ignores columns, sort fields and filters this table does not have', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS, defaultSortField: 'Name', defaultSortDirection: 'asc' });
+            await flushPromises();
+
+            element.applyConfig({
+                columns: ['Gone__c'],
+                sortedBy: 'Gone__c',
+                sortedDirection: 'desc',
+                columnFilters: { Phone: 'not filterable', Gone__c: 'x' }
+            });
+            await flushPromises();
+
+            expect(element.currentConfig).toEqual({
+                v: 1,
+                columns: null,
+                sortedBy: 'Name',
+                sortedDirection: 'asc',
+                searchTerm: '',
+                columnFilters: {}
+            });
+        });
+
+        it('treats a null config as "reset to the defaults"', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS, defaultSortField: 'Name', defaultSortDirection: 'asc' });
+            await flushPromises();
+            element.applyConfig({ columns: ['Name'], sortedBy: 'Industry', sortedDirection: 'desc', searchTerm: 'x' });
+            await flushPromises();
+
+            element.applyConfig(null);
+            await flushPromises();
+
+            expect(element.currentConfig).toEqual({
+                v: 1,
+                columns: null,
+                sortedBy: 'Name',
+                sortedDirection: 'asc',
+                searchTerm: '',
+                columnFilters: {}
+            });
+        });
+
+        it('uses a config whose columns are not fewer than the table\'s as "all columns"', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ columns: THREE_COLUMNS });
+            await flushPromises();
+
+            element.applyConfig({ columns: ['Name', 'Industry', 'Phone'] });
+            await flushPromises();
+
+            expect(element.currentConfig.columns).toBeNull();
+        });
+    });
+
+    describe('saved views', () => {
+        function savedView(id, name, config, isDefault = false) {
+            return { id, name, config: JSON.stringify(config), isDefault };
+        }
+
+        it('has no view bar without a view-key, and queries straight away', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable();
+            await flushPromises();
+
+            expect(element.shadowRoot.querySelector('c-datatable-view-bar')).toBeNull();
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(getViews).not.toHaveBeenCalled();
+        });
+
+        it('waits for the user\'s views, then queries once with the default view applied', async () => {
+            let resolveViews;
+            getViews.mockReturnValue(
+                new Promise((resolve) => {
+                    resolveViews = resolve;
+                })
+            );
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ viewKey: 'accounts-main', searchFields: ['Name'] });
+            await flushPromises();
+
+            expect(getViews).toHaveBeenCalledWith({ viewKey: 'accounts-main' });
+            expect(queryRecords).not.toHaveBeenCalled();
+
+            resolveViews([savedView('v1', 'Acme only', { v: 1, searchTerm: 'acme', sortedBy: 'Industry', sortedDirection: 'desc' }, true)]);
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(queryRecords).toHaveBeenCalledWith(
+                expect.objectContaining({ searchTerm: 'acme', sortField: 'Industry', sortDirection: 'desc', pageNumber: 1 })
+            );
+            expect(element.currentConfig.searchTerm).toBe('acme');
+        });
+
+        it('queries once with the defaults when no view is the default', async () => {
+            getViews.mockResolvedValue([savedView('v1', 'Acme only', { v: 1, searchTerm: 'acme' })]);
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            createDatatable({ viewKey: 'accounts-main', searchFields: ['Name'] });
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(queryRecords).toHaveBeenCalledWith(expect.objectContaining({ searchTerm: '' }));
+        });
+
+        it('still loads the table when the views cannot be read', async () => {
+            getViews.mockRejectedValue({ body: { message: 'No access' } });
+            queryRecords.mockResolvedValue(queryResult([{ Id: '1', Name: 'Acme' }]));
+            const element = createDatatable({ viewKey: 'accounts-main' });
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(element.shadowRoot.querySelector('lightning-datatable').data).toHaveLength(1);
+        });
+
+        it('shows a spinner rather than "no records" while it waits for the views', async () => {
+            getViews.mockReturnValue(new Promise(() => {}));
+            const element = createDatatable({ viewKey: 'accounts-main' });
+            await flushPromises();
+
+            const stateManager = element.shadowRoot.querySelector('c-state-manager');
+            expect(stateManager.isLoading).toBe(true);
+            expect(stateManager.isEmpty).toBe(false);
+        });
+
+        it('re-queries from page 1 with a view the user picks, and resets for "All records"', async () => {
+            getViews.mockResolvedValue([savedView('v1', 'Tech', { v: 1, searchTerm: 'tech' })]);
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ viewKey: 'accounts-main', searchFields: ['Name'] });
+            await flushPromises();
+            queryRecords.mockClear();
+
+            const bar = element.shadowRoot.querySelector('c-datatable-view-bar');
+            bar.dispatchEvent(new CustomEvent('viewselect', { detail: { viewId: 'v1', config: { v: 1, searchTerm: 'tech' } } }));
+            await flushPromises();
+            expect(queryRecords).toHaveBeenLastCalledWith(expect.objectContaining({ searchTerm: 'tech', pageNumber: 1 }));
+
+            bar.dispatchEvent(new CustomEvent('viewselect', { detail: { viewId: null, config: null } }));
+            await flushPromises();
+            expect(queryRecords).toHaveBeenLastCalledWith(expect.objectContaining({ searchTerm: '', pageNumber: 1 }));
+        });
+
+        it('hands the view bar the table\'s current settings', async () => {
+            getViews.mockResolvedValue([]);
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ viewKey: 'accounts-main', defaultSortField: 'Name', defaultSortDirection: 'asc' });
+            await flushPromises();
+
+            const bar = element.shadowRoot.querySelector('c-datatable-view-bar');
+            expect(bar.viewKey).toBe('accounts-main');
+            expect(bar.objectApiName).toBe('Account');
+            expect(bar.currentConfig).toEqual(element.currentConfig);
         });
     });
 });

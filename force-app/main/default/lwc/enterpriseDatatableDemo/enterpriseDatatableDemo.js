@@ -20,6 +20,8 @@ const FALLBACK_PAGE_SIZE = 25;
  *  - c-csv-import-wizard in a c-modal, refreshing the table when it finishes
  *  - c-aggregate-kpi-card tiles above the table, each computing its own
  *    COUNT/SUM/AVG through GenericAggregateService
+ *  - enable-column-chooser and view-key, so each user can hide columns and
+ *    save, reopen and default their own views (stored in ToolkitSavedView__c)
  */
 export default class EnterpriseDatatableDemo extends LightningElement {
     pageSize = FALLBACK_PAGE_SIZE;

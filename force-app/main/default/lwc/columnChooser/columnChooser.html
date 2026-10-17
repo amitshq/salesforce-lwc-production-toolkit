@@ -1,0 +1,21 @@
+<template>
+    <div class="slds-box slds-box_x-small">
+        <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-p-bottom_x-small">
+            <span class="slds-text-title_caps">Columns</span>
+            <lightning-button label="Show all" variant="base" onclick={handleShowAll} disabled={allVisible}></lightning-button>
+        </div>
+        <div class="slds-grid slds-wrap">
+            <template for:each={items} for:item="item">
+                <div key={item.fieldName} class="slds-col slds-size_1-of-2 slds-medium-size_1-of-3">
+                    <lightning-input
+                        type="checkbox"
+                        label={item.label}
+                        checked={item.checked}
+                        data-field-name={item.fieldName}
+                        onchange={handleToggle}
+                    ></lightning-input>
+                </div>
+            </template>
+        </div>
+    </div>
+</template>

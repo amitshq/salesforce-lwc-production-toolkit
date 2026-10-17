@@ -33,6 +33,15 @@ const BULK_DELETE_ACTION_NAME = '__bulkDelete';
  *    (`Owner_Name`) so lightning-datatable - which requires flat,
  *    dot-free field names - can render it; that alias is substituted
  *    automatically, no extra config needed.
+ *
+ * Optional extras:
+ *  - `enable-column-chooser` adds a button that lets each user hide and show
+ *    columns (the full column list is still queried, so toggling is instant).
+ *  - `view-key` turns on saved views: a toolbar to save the table's current
+ *    columns, sort, search and filters under a name, reopen them later, and
+ *    pick one that opens by default. Views are private to each user. The key
+ *    only has to be unique per table, e.g. "accounts-main". The first query
+ *    waits for the default view, so the table does not load twice.
  */
 export default class EnterpriseDatatable extends LightningElement {
     @api objectApiName;
@@ -50,6 +59,8 @@ export default class EnterpriseDatatable extends LightningElement {
     @api bulkActions = [];
     @api enableBulkDelete = false;
     @api enableConflictDetection = false;
+    @api enableColumnChooser = false;
+    @api viewKey;
     @api hideRefreshButton = false;
 
     records = [];
@@ -69,13 +80,21 @@ export default class EnterpriseDatatable extends LightningElement {
     columnFilters = {};
     selectedRows = [];
     canDeleteObject = false;
+    visibleFields = null; // null = every column; otherwise the fieldNames to show
+    showColumnChooser = false;
 
     _debouncedReload = debounce(() => this.loadPage(1, { append: false }), SEARCH_DEBOUNCE_MS);
 
     connectedCallback() {
         this.sortedBy = this.defaultSortField;
         this.sortedDirection = this.defaultSortDirection;
-        this.loadPage(1, { append: false });
+        if (this.viewKey) {
+            // The view bar reports the default view first (see handleViewsReady), so the
+            // table loads once, with that view's settings, instead of twice.
+            this.isLoading = true;
+        } else {
+            this.loadPage(1, { append: false });
+        }
 
         if (this.enableBulkDelete) {
             getObjectAccess(this.objectApiName)
@@ -144,6 +163,65 @@ export default class EnterpriseDatatable extends LightningElement {
         return this.filterableColumns.length > 0;
     }
 
+    get filterInputs() {
+        return this.filterableColumns.map((column) => ({
+            fieldName: column.fieldName,
+            label: column.label,
+            value: this.columnFilters[column.fieldName] || ''
+        }));
+    }
+
+    get hasViewBar() {
+        return !!this.viewKey;
+    }
+
+    get visibleColumns() {
+        const columns = this.columns || [];
+        if (!this.visibleFields) {
+            return columns;
+        }
+        const shown = new Set(this.visibleFields);
+        // Columns without a fieldName (row actions, buttons) cannot be hidden.
+        return columns.filter((column) => !column.fieldName || shown.has(column.fieldName));
+    }
+
+    get columnChooserItems() {
+        return (this.columns || []).filter((column) => column.fieldName).map(({ fieldName, label }) => ({ fieldName, label }));
+    }
+
+    get columnChooserVariant() {
+        return this.showColumnChooser || this.visibleFields ? 'brand' : 'border';
+    }
+
+    /** The sort column as lightning-datatable knows it (relationship paths are flattened to an alias). */
+    get tableSortedBy() {
+        return this.sortedBy && this.sortedBy.includes('.') ? toAlias(this.sortedBy) : this.sortedBy;
+    }
+
+    /**
+     * The table's current layout as a plain object: visible columns, sort, search
+     * and filters. This is what a saved view stores, and what applyConfig accepts.
+     */
+    @api
+    get currentConfig() {
+        const filters = {};
+        Object.keys(this.columnFilters)
+            .sort()
+            .forEach((fieldName) => {
+                if (this.columnFilters[fieldName] !== '' && this.columnFilters[fieldName] != null) {
+                    filters[fieldName] = this.columnFilters[fieldName];
+                }
+            });
+        return {
+            v: 1,
+            columns: this.visibleFields ? [...this.visibleFields] : null,
+            sortedBy: this.sortedBy,
+            sortedDirection: this.sortedDirection,
+            searchTerm: this.searchTerm,
+            columnFilters: filters
+        };
+    }
+
     get queryFields() {
         const fields = new Set([this.keyField]);
         (this.columns || []).forEach((column) => {
@@ -158,7 +236,7 @@ export default class EnterpriseDatatable extends LightningElement {
     }
 
     get tableColumns() {
-        return (this.columns || []).map((column) => {
+        return this.visibleColumns.map((column) => {
             if (column.fieldName && column.fieldName.includes('.')) {
                 return { ...column, fieldName: toAlias(column.fieldName) };
             }
@@ -186,6 +264,42 @@ export default class EnterpriseDatatable extends LightningElement {
         this.draftValues = [];
         this.datatableErrors = {};
         return this.loadPage(this.isInfiniteMode ? 1 : this.currentPage, { append: false });
+    }
+
+    /**
+     * Applies a layout produced by `currentConfig` (or loaded from a saved view) and
+     * re-queries from page 1. Anything the config mentions that this table no longer has -
+     * a removed column, a field that is not filterable - is ignored, and a null/empty
+     * config resets the table to its defaults.
+     */
+    @api
+    applyConfig(config) {
+        this.restoreConfig(config);
+        return this.loadPage(1, { append: false });
+    }
+
+    restoreConfig(config) {
+        const settings = config && typeof config === 'object' ? config : {};
+        const known = (this.columns || []).filter((column) => column.fieldName).map((column) => column.fieldName);
+
+        const requested = Array.isArray(settings.columns) ? known.filter((name) => settings.columns.includes(name)) : [];
+        this.visibleFields = requested.length && requested.length < known.length ? requested : null;
+
+        const sortIsKnown = known.includes(settings.sortedBy);
+        this.sortedBy = sortIsKnown ? settings.sortedBy : this.defaultSortField;
+        this.sortedDirection =
+            sortIsKnown && ['asc', 'desc'].includes(settings.sortedDirection) ? settings.sortedDirection : this.defaultSortDirection;
+
+        this.searchTerm = typeof settings.searchTerm === 'string' ? settings.searchTerm : '';
+
+        const savedFilters = settings.columnFilters && typeof settings.columnFilters === 'object' ? settings.columnFilters : {};
+        const filters = {};
+        this.filterableColumns.forEach((column) => {
+            if (typeof savedFilters[column.fieldName] === 'string' && savedFilters[column.fieldName] !== '') {
+                filters[column.fieldName] = savedFilters[column.fieldName];
+            }
+        });
+        this.columnFilters = filters;
     }
 
     buildFilters() {
@@ -246,9 +360,34 @@ export default class EnterpriseDatatable extends LightningElement {
     }
 
     handleSort(event) {
-        this.sortedBy = event.detail.fieldName;
+        // lightning-datatable reports the flattened alias (Owner_Name); the server needs the real path.
+        const reported = event.detail.fieldName;
+        const column = (this.columns || []).find(
+            (candidate) => candidate.fieldName && (candidate.fieldName === reported || toAlias(candidate.fieldName) === reported)
+        );
+        this.sortedBy = column ? column.fieldName : reported;
         this.sortedDirection = event.detail.sortDirection;
         this.loadPage(1, { append: false });
+    }
+
+    handleColumnChooserToggle() {
+        this.showColumnChooser = !this.showColumnChooser;
+    }
+
+    handleVisibleFieldsChange(event) {
+        const chosen = event.detail.visibleFields;
+        this.visibleFields = chosen.length >= this.columnChooserItems.length ? null : chosen;
+    }
+
+    handleViewsReady(event) {
+        if (event.detail.config) {
+            this.restoreConfig(event.detail.config);
+        }
+        this.loadPage(1, { append: false });
+    }
+
+    handleViewSelect(event) {
+        this.applyConfig(event.detail.config);
     }
 
     handleSearchInput(event) {

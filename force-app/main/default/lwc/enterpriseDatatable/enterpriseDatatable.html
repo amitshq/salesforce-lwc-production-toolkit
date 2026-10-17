@@ -1,5 +1,16 @@
 <template>
     <lightning-card title={title} icon-name="standard:related_list">
+        <template if:true={enableColumnChooser}>
+            <lightning-button-icon
+                slot="actions"
+                icon-name="utility:table_settings"
+                variant={columnChooserVariant}
+                alternative-text="Choose columns"
+                title="Choose columns"
+                class="slds-m-right_xx-small"
+                onclick={handleColumnChooserToggle}
+            ></lightning-button-icon>
+        </template>
         <template if:false={hideRefreshButton}>
             <lightning-button-icon
                 slot="actions"
@@ -10,6 +21,26 @@
             ></lightning-button-icon>
         </template>
 
+        <template if:true={hasViewBar}>
+            <c-datatable-view-bar
+                view-key={viewKey}
+                object-api-name={objectApiName}
+                current-config={currentConfig}
+                onviewsready={handleViewsReady}
+                onviewselect={handleViewSelect}
+            ></c-datatable-view-bar>
+        </template>
+
+        <template if:true={showColumnChooser}>
+            <div class="slds-p-horizontal_medium slds-p-bottom_small">
+                <c-column-chooser
+                    columns={columnChooserItems}
+                    visible-fields={visibleFields}
+                    onchange={handleVisibleFieldsChange}
+                ></c-column-chooser>
+            </div>
+        </template>
+
         <template if:true={hasSearch}>
             <div class="slds-p-horizontal_medium slds-p-bottom_small">
                 <lightning-input
@@ -17,6 +48,7 @@
                     label="Search"
                     variant="label-hidden"
                     placeholder={searchPlaceholder}
+                    value={searchTerm}
                     onchange={handleSearchInput}
                 ></lightning-input>
             </div>
@@ -24,12 +56,13 @@
 
         <template if:true={hasFilterableColumns}>
             <div class="slds-p-horizontal_medium slds-p-bottom_small slds-grid slds-wrap slds-gutters_x-small">
-                <template for:each={filterableColumns} for:item="column">
-                    <div key={column.fieldName} class="slds-col slds-size_1-of-4 slds-p-bottom_x-small">
+                <template for:each={filterInputs} for:item="filterInput">
+                    <div key={filterInput.fieldName} class="slds-col slds-size_1-of-4 slds-p-bottom_x-small">
                         <lightning-input
-                            label={column.label}
+                            label={filterInput.label}
                             variant="label-stacked"
-                            data-field-name={column.fieldName}
+                            value={filterInput.value}
+                            data-field-name={filterInput.fieldName}
                             onchange={handleColumnFilterInput}
                         ></lightning-input>
                     </div>
@@ -48,7 +81,7 @@
                 key-field={keyField}
                 data={records}
                 columns={tableColumns}
-                sorted-by={sortedBy}
+                sorted-by={tableSortedBy}
                 sorted-direction={sortedDirection}
                 onsort={handleSort}
                 draft-values={draftValues}
