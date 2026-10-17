@@ -38,7 +38,7 @@ npm run lint         # ESLint
 npm run prettier     # format everything
 ```
 
-190 Jest tests and 24 Apex test methods cover the components and services below.
+201 Jest tests and 24 Apex test methods cover the components and services below.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ force-app/main/default/
     ├── modal, confirmDialog, wizard, stateManager, emptyState, errorState,
     │   bulkActionBar, infiniteScrollLoader, permissionGate, featureGate,
     │   kpiCard, dateRangePicker                        UX components
-    └── functionUtils, objectUtils, jsonUtils, urlUtils, apexErrorUtils,
+    └── functionUtils, objectUtils, jsonUtils, csvUtils, urlUtils, apexErrorUtils,
         ldsErrorUtils, navigationUtils, recordUtils, permissionUtils,
         metadataUtils, toastService, lmsUtils           data/Salesforce utility modules
 ```
@@ -165,6 +165,7 @@ What it does with that config:
 | Nested property access | [`objectUtils.getNestedValue`/`setNestedValue`](force-app/main/default/lwc/objectUtils/objectUtils.js) |
 | JSON formatting | [`jsonUtils`](force-app/main/default/lwc/jsonUtils) |
 | URL/query parameter helpers | [`urlUtils`](force-app/main/default/lwc/urlUtils) |
+| CSV export | [`csvUtils`](force-app/main/default/lwc/csvUtils) - RFC 4180 escaping + browser download (used by the datatable demo's Export CSV action) |
 
 ### Salesforce utilities
 
