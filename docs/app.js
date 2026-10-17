@@ -291,22 +291,6 @@ const CATALOG = [
     ]
   },
   {
-    id: 'csv-utils',
-    name: 'csvUtils',
-    category: 'Data utilities',
-    kind: 'JS module',
-    path: 'lwc/csvUtils',
-    tagline: 'RFC 4180 CSV build + browser download for datatable / bulk-action exports.',
-    usage:
-      "import { exportRowsToCsv } from 'c/csvUtils';\n\nexportRowsToCsv(selectedRows, this.columns, 'accounts-export.csv');",
-    functions: [
-      ['escapeCsvValue(value)', 'Quotes fields that contain commas, quotes, or newlines.'],
-      ['rowsToCsv(rows, columns)', 'Builds a CSV string from rows + datatable-style columns.'],
-      ['downloadCsv(filename, csvContent)', 'Triggers a browser file download.'],
-      ['exportRowsToCsv(rows, columns, filename?)', 'rowsToCsv + downloadCsv; returns the CSV content.']
-    ]
-  },
-  {
     id: 'json-utils',
     name: 'jsonUtils',
     category: 'Data utilities',
