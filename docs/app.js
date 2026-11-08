@@ -61,6 +61,35 @@
 /* =========================================================================
    3. COPY-TO-CLIPBOARD on every code block
    ========================================================================= */
+/** Copies text. Clipboard API first; a hidden textarea where it is missing or refuses (file:// pages, older browsers). */
+function copyToClipboard(text) {
+  function fallback() {
+    const previouslyFocused = document.activeElement;
+    const field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px;';
+    document.body.appendChild(field);
+    field.select();
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch (error) {
+      copied = false;
+    }
+    document.body.removeChild(field);
+    if (previouslyFocused && typeof previouslyFocused.focus === 'function') previouslyFocused.focus();
+    return copied;
+  }
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    return navigator.clipboard.writeText(text).then(
+      () => true,
+      () => fallback()
+    );
+  }
+  return Promise.resolve(fallback());
+}
+
 function wrapCodeBlocksWithCopyButtons(scope) {
   scope.querySelectorAll('pre').forEach((pre) => {
     if (pre.closest('.code-block')) return;
@@ -74,20 +103,18 @@ function wrapCodeBlocksWithCopyButtons(scope) {
     button.className = 'copy-btn';
     button.textContent = 'Copy';
     button.addEventListener('click', () => {
-      const text = pre.textContent;
-      navigator.clipboard
-        .writeText(text)
-        .then(() => {
-          button.textContent = 'Copied!';
-          button.classList.add('copied');
-          setTimeout(() => {
-            button.textContent = 'Copy';
-            button.classList.remove('copied');
-          }, 1500);
-        })
-        .catch(() => {
+      copyToClipboard(pre.textContent).then((copied) => {
+        if (!copied) {
           button.textContent = 'Press Ctrl+C';
-        });
+          return;
+        }
+        button.textContent = 'Copied!';
+        button.classList.add('copied');
+        setTimeout(() => {
+          button.textContent = 'Copy';
+          button.classList.remove('copied');
+        }, 1500);
+      });
     });
     wrapper.appendChild(button);
   });
@@ -99,12 +126,16 @@ wrapCodeBlocksWithCopyButtons(document);
    ========================================================================= */
 const CATALOG = window.TOOLKIT_CATALOG; // defined in catalog.js
 
-/* ---- render the catalog grid ---- */
+/* ---- render the catalog grid: filter by what you want to do ---- */
+const GOALS = window.TOOLKIT_GOALS; // defined in goals.js
 const grid = document.getElementById('catalogGrid');
 const emptyMsg = document.getElementById('catalogEmpty');
 const searchInput = document.getElementById('catalogSearch');
-const pills = document.querySelectorAll('#filterPills .pill');
-let activeFilter = 'all';
+const pillBox = document.getElementById('filterPills');
+const goalBlurb = document.getElementById('catalogBlurb');
+let activeGoal = 'all';
+
+document.getElementById('statPieces').textContent = String(CATALOG.length);
 
 function cardHtml(item) {
   return (
@@ -117,27 +148,44 @@ function cardHtml(item) {
   );
 }
 
+function renderPills() {
+  pillBox.innerHTML = [{ id: 'all', label: 'Everything' }, ...GOALS]
+    .map(
+      (goal) =>
+        `<button type="button" class="pill${goal.id === activeGoal ? ' active' : ''}" data-goal="${goal.id}" aria-pressed="${goal.id === activeGoal}">${goal.label}</button>`
+    )
+    .join('');
+}
+
 function renderCatalog() {
   const term = (searchInput.value || '').toLowerCase().trim();
-  const filtered = CATALOG.filter((item) => {
-    const matchesFilter = activeFilter === 'all' || item.category === activeFilter;
+  const goal = GOALS.find((candidate) => candidate.id === activeGoal);
+  const pool = goal ? goal.ids.map((id) => CATALOG.find((item) => item.id === id)).filter(Boolean) : CATALOG;
+  const filtered = pool.filter((item) => {
     const haystack = `${item.name} ${item.tagline} ${item.category} ${item.path}`.toLowerCase();
-    const matchesSearch = !term || haystack.includes(term);
-    return matchesFilter && matchesSearch;
+    return !term || haystack.includes(term);
   });
   grid.innerHTML = filtered.map(cardHtml).join('');
   emptyMsg.hidden = filtered.length !== 0;
+  goalBlurb.textContent = goal ? goal.blurb : '';
 }
 
-pills.forEach((pill) => {
-  pill.addEventListener('click', () => {
-    pills.forEach((p) => p.classList.remove('active'));
-    pill.classList.add('active');
-    activeFilter = pill.dataset.filter;
-    renderCatalog();
-  });
+pillBox.addEventListener('click', (event) => {
+  const pill = event.target.closest('.pill');
+  if (!pill) return;
+  activeGoal = pill.dataset.goal;
+  renderPills();
+  renderCatalog();
 });
-searchInput.addEventListener('input', renderCatalog);
+searchInput.addEventListener('input', () => {
+  // Searching means "look everywhere": drop a goal that would hide matches.
+  if (searchInput.value.trim() && activeGoal !== 'all') {
+    activeGoal = 'all';
+    renderPills();
+  }
+  renderCatalog();
+});
+renderPills();
 renderCatalog();
 
 /* ---- catalog detail modal ---- */
@@ -165,7 +213,8 @@ function openCatalogModal(id) {
   let html = `<span class="modal-kind">${item.kind} &middot; ${item.category}</span>`;
   html += `<h3 id="modalTitle">${item.name}</h3>`;
   html += `<p class="modal-tagline">${item.tagline}</p>`;
-  html += `<h4>Usage</h4><div class="code-block"><pre><code>${escapeHtml(item.usage)}</code></pre></div>`;
+  // Plain <pre>: wrapCodeBlocksWithCopyButtons adds the wrapper and the Copy button.
+  html += `<h4>Usage</h4><pre><code>${escapeHtml(item.usage)}</code></pre>`;
   if (item.api) {
     html += `<h4>Properties</h4>${rowsToTable(['Property', 'Type', 'Default', 'Description'], item.api)}`;
   }
@@ -255,10 +304,13 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
 }
 
 /* =========================================================================
-   7. LIVE DEMO - a fully client-side mock of the enterpriseDatatable pipeline
+   7. TRY IT - a client-side mock of c-enterprise-datatable and its newest features.
+   `serverRows` is what "Salesforce" holds; `rows` is what this table has loaded. A colleague's
+   change only touches serverRows, which is why conflict detection and live refresh have
+   something to do.
    ========================================================================= */
-(function liveDemo() {
-  const ORIGINAL_ROWS = [
+(function playground() {
+  const RAW_ROWS = [
     { id: '1', name: 'Acme Corporation', industry: 'Manufacturing', revenue: 4200000, owner: 'J. Reyes' },
     { id: '2', name: 'Globex Industries', industry: 'Manufacturing', revenue: 1850000, owner: 'A. Chen' },
     { id: '3', name: 'Initech Software', industry: 'Technology', revenue: 980000, owner: 'M. Patel' },
@@ -273,6 +325,13 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
     { id: '12', name: 'Oscorp Chemicals', industry: 'Manufacturing', revenue: 3950000, owner: 'M. Patel' },
     { id: '13', name: 'Tyrell BioTech', industry: 'Healthcare', revenue: 8100000, owner: 'J. Reyes' }
   ];
+  // version stands in for SystemModstamp; sfid is a made-up 15-character Salesforce Id.
+  const SEED_ROWS = RAW_ROWS.map((row, index) => ({
+    ...row,
+    sfid: '001xx000003DE' + String(index + 1).padStart(2, '0'),
+    version: 1
+  }));
+  const INDUSTRIES = ['Manufacturing', 'Technology', 'Healthcare', 'Energy', 'Research', 'Transportation', 'Consumer Goods'];
   const ALWAYS_FAILS_ID = '2'; // "Globex Industries" - simulates a server-side validation failure
   const PAGE_SIZE = 5;
   const COLUMNS = [
@@ -281,14 +340,28 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
     { field: 'revenue', label: 'Annual Revenue', editable: false, format: 'currency' },
     { field: 'owner', label: 'Owner', editable: false }
   ];
+  const FIELDS = COLUMNS.map((column) => column.field);
+  const CONFLICT_MESSAGE =
+    'This record was changed by someone else after you loaded it. Refresh to see the latest version, then re-apply your edit.';
+  const VIEWS_KEY = 'toolkitDemoViews';
 
-  let rows = ORIGINAL_ROWS.map((r) => ({ ...r }));
+  const clone = (list) => list.map((row) => ({ ...row }));
+
+  let serverRows = clone(SEED_ROWS);
+  let rows = clone(serverRows);
   let sortField = 'name';
   let sortDir = 'asc';
   let searchTerm = '';
   let page = 1;
   let selected = new Set();
   let rowErrors = {}; // id -> message
+  let hidden = new Set(); // hidden column fields
+  let pendingChange = false;
+  let editing = false;
+  let flashIds = new Set();
+  let views = [];
+  let activeViewName = '';
+  let showSaveForm = false;
   let searchDebounce;
 
   const headRow = document.getElementById('demoHeadRow');
@@ -300,9 +373,84 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
   const searchBox = document.getElementById('demoSearch');
   const refreshBtn = document.getElementById('demoRefresh');
   const kpis = document.getElementById('demoKpis');
+  const columnsBtn = document.getElementById('demoColumnsBtn');
+  const columnPanel = document.getElementById('demoColumnPanel');
+  const viewsBox = document.getElementById('demoViews');
+  const notice = document.getElementById('demoNotice');
+  const simulateBtn = document.getElementById('demoSimulate');
+  const resetBtn = document.getElementById('demoReset');
+  const conflictSwitch = document.getElementById('swConflict');
+  const liveSwitch = document.getElementById('swLive');
+  const stepsList = document.getElementById('trySteps');
+  const stepsProgress = document.getElementById('tryProgress');
+
+  /* ---- the "try this" checklist ---- */
+  const stepsDone = new Set();
+  function markStep(key) {
+    if (stepsDone.has(key)) return;
+    const item = stepsList.querySelector(`[data-step="${key}"]`);
+    if (!item) return;
+    stepsDone.add(key);
+    item.classList.add('done');
+    item.insertAdjacentHTML('beforeend', '<span class="sr-only"> (done)</span>');
+    const total = stepsList.children.length;
+    stepsProgress.textContent = `${stepsDone.size} of ${total}`;
+    if (stepsDone.size === total) showToast('You have tried everything. Nice!', 'success');
+  }
 
   function currencyFormat(value) {
     return '$' + Number(value).toLocaleString('en-US');
+  }
+
+  /* ---- saved views (kept in localStorage, so they survive a reload) ---- */
+  function loadViews() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(VIEWS_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed.filter((view) => view && typeof view.name === 'string' && view.config) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function persistViews() {
+    try {
+      localStorage.setItem(VIEWS_KEY, JSON.stringify(views));
+    } catch (error) {
+      // Storage can be blocked (private windows); views then last until the page closes.
+    }
+  }
+
+  function currentConfig() {
+    return { hidden: FIELDS.filter((field) => hidden.has(field)), sortField, sortDir, search: searchTerm };
+  }
+
+  function applyConfig(config) {
+    const saved = config || {};
+    const toHide = FIELDS.filter((field) => (saved.hidden || []).includes(field));
+    hidden = new Set(toHide.length < FIELDS.length ? toHide : []); // at least one column stays
+    sortField = FIELDS.includes(saved.sortField) ? saved.sortField : 'name';
+    sortDir = saved.sortDir === 'desc' ? 'desc' : 'asc';
+    searchTerm = typeof saved.search === 'string' ? saved.search : '';
+    searchBox.value = searchTerm;
+    page = 1;
+    syncColumnPanel();
+  }
+
+  /* ---- what is on screen ---- */
+  function visibleColumns() {
+    return COLUMNS.filter((column) => !hidden.has(column.field));
+  }
+
+  function getFiltered() {
+    const term = searchTerm.toLowerCase();
+    const list = rows.filter((row) => !term || row.name.toLowerCase().includes(term) || row.industry.toLowerCase().includes(term));
+    list.sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return list;
   }
 
   // What c-aggregate-kpi-card does server-side through GenericAggregateService: COUNT / SUM / AVG over the filtered rows.
@@ -318,33 +466,82 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
       .join('');
   }
 
-  function getFiltered() {
-    const term = searchTerm.toLowerCase();
-    let list = rows.filter(
-      (r) => !term || r.name.toLowerCase().includes(term) || r.industry.toLowerCase().includes(term)
-    );
-    list.sort((a, b) => {
-      const av = a[sortField];
-      const bv = b[sortField];
-      let cmp;
-      if (typeof av === 'number') cmp = av - bv;
-      else cmp = String(av).localeCompare(String(bv));
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-    return list;
-  }
-
-  function renderHead() {
+  function renderHead(columns) {
     headRow.innerHTML =
       '<th style="width:34px"></th>' +
-      COLUMNS.map((col) => {
-        const arrow = sortField === col.field ? `<span class="sort-arrow">${sortDir === 'asc' ? '▲' : '▼'}</span>` : '';
-        return `<th data-field="${col.field}">${col.label}${arrow}</th>`;
-      }).join('');
+      columns
+        .map((col) => {
+          const arrow = sortField === col.field ? `<span class="sort-arrow">${sortDir === 'asc' ? '▲' : '▼'}</span>` : '';
+          return `<th data-field="${col.field}">${col.label}${arrow}</th>`;
+        })
+        .join('');
+  }
+
+  function renderNotice() {
+    if (!pendingChange) {
+      notice.hidden = true;
+      notice.innerHTML = '';
+      return;
+    }
+    const unsaved = editing || Object.keys(rowErrors).length > 0;
+    notice.hidden = false;
+    notice.innerHTML =
+      `<span>${unsaved ? 'Records have changed. Refreshing will discard your unsaved edits.' : 'Records have changed since this list was loaded.'}</span>` +
+      `<button type="button" class="btn primary small" id="demoNoticeRefresh">Refresh</button>`;
+    document.getElementById('demoNoticeRefresh').addEventListener('click', () => reload('Refreshed - you are looking at the latest data.'));
+  }
+
+  function renderViews() {
+    // Re-rendering replaces the controls, so keep what the user was typing and where focus was.
+    const typedName = viewsBox.querySelector('#demoViewName');
+    const typedDefault = viewsBox.querySelector('#demoViewDefault');
+    const draft = typedName ? { name: typedName.value, makeDefault: typedDefault.checked } : null;
+    const focused = document.activeElement && viewsBox.contains(document.activeElement) ? document.activeElement : null;
+    const focusKey = focused ? focused.id || focused.dataset.viewAction : null;
+
+    const active = views.find((view) => view.name === activeViewName);
+    const modified = !!active && JSON.stringify(active.config) !== JSON.stringify(currentConfig());
+    const options = ['<option value="">All records</option>']
+      .concat(
+        views.map(
+          (view, index) =>
+            `<option value="${index}"${view.name === activeViewName ? ' selected' : ''}>${escapeHtml(view.name)}${view.isDefault ? ' (default)' : ''}</option>`
+        )
+      )
+      .join('');
+
+    viewsBox.innerHTML =
+      `<label class="views-label"><span>View</span><select id="demoViewSelect">${options}</select></label>` +
+      (modified
+        ? `<span class="badge-soft">Unsaved changes</span><button type="button" class="btn secondary small" data-view-action="update">Update view</button>`
+        : '') +
+      `<button type="button" class="btn secondary small" data-view-action="new">Save as new view</button>` +
+      (active
+        ? `<button type="button" class="link-btn" data-view-action="default">${active.isDefault ? 'Remove default' : 'Make default'}</button>` +
+          `<button type="button" class="link-btn" data-view-action="delete">Delete view</button>`
+        : '') +
+      (showSaveForm
+        ? `<form class="view-form" id="demoViewForm">` +
+          `<input type="text" id="demoViewName" maxlength="40" placeholder="Name this view" aria-label="View name" required />` +
+          `<label class="switch inline"><input type="checkbox" id="demoViewDefault" /><span>Open by default</span></label>` +
+          `<button type="submit" class="btn primary small">Save view</button>` +
+          `<button type="button" class="link-btn" data-view-action="cancel">Cancel</button>` +
+          `</form>`
+        : '');
+
+    if (draft) {
+      viewsBox.querySelector('#demoViewName').value = draft.name;
+      viewsBox.querySelector('#demoViewDefault').checked = draft.makeDefault;
+    }
+    if (focusKey) {
+      const again = viewsBox.querySelector(`[id="${focusKey}"], [data-view-action="${focusKey}"]`);
+      if (again) again.focus();
+    }
   }
 
   function render() {
-    renderHead();
+    const columns = visibleColumns();
+    renderHead(columns);
     const filtered = getFiltered();
     renderKpis(filtered);
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -356,17 +553,18 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
       .map((row) => {
         const isSelected = selected.has(row.id);
         const error = rowErrors[row.id];
-        const cells = COLUMNS.map((col) => {
-          const raw = row[col.field];
-          const display = col.format === 'currency' ? currencyFormat(raw) : escapeHtml(String(raw));
-          const editableClass = col.editable ? 'editable-cell' : '';
-          return `<td class="${editableClass}" data-id="${row.id}" data-field="${col.field}" ${col.editable ? 'data-editable="true"' : ''}>${display}</td>`;
-        }).join('');
+        const cells = columns
+          .map((col) => {
+            const raw = row[col.field];
+            const display = col.format === 'currency' ? currencyFormat(raw) : escapeHtml(String(raw));
+            return `<td class="${col.editable ? 'editable-cell' : ''}" data-id="${row.id}" data-field="${col.field}" ${col.editable ? 'data-editable="true"' : ''}>${display}</td>`;
+          })
+          .join('');
         const errorRow = error
-          ? `<tr class="row-error"><td></td><td colspan="${COLUMNS.length}"><span class="row-error-msg">⚠ Save failed: ${escapeHtml(error)}</span></td></tr>`
+          ? `<tr class="row-error"><td></td><td colspan="${columns.length}"><span class="row-error-msg">⚠ Save failed: ${escapeHtml(error)}</span></td></tr>`
           : '';
         return (
-          `<tr class="${isSelected ? 'row-selected' : ''}" data-row-id="${row.id}">` +
+          `<tr class="${isSelected ? 'row-selected' : ''}${flashIds.has(row.id) ? ' row-flash' : ''}" data-row-id="${row.id}">` +
           `<td><input type="checkbox" data-select="${row.id}" ${isSelected ? 'checked' : ''} aria-label="Select ${escapeHtml(row.name)}" /></td>` +
           cells +
           `</tr>${errorRow}`
@@ -382,51 +580,283 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
       bulkBar.hidden = false;
       bulkBar.innerHTML =
         `<span>${selected.size} selected</span>` +
-        `<div style="display:flex;gap:8px;">` +
+        `<div class="bulk-actions">` +
         `<button type="button" class="btn secondary small" id="demoClearSelection">Clear</button>` +
+        `<button type="button" class="btn secondary small" id="demoCopyIds">Copy Ids</button>` +
         `<button type="button" class="btn small" id="demoBulkDelete" style="background:var(--danger);color:#fff;border-color:transparent;">Delete selected</button>` +
         `</div>`;
       document.getElementById('demoClearSelection').addEventListener('click', () => {
         selected.clear();
         render();
       });
+      document.getElementById('demoCopyIds').addEventListener('click', handleCopyIds);
       document.getElementById('demoBulkDelete').addEventListener('click', handleBulkDelete);
     } else {
       bulkBar.hidden = true;
       bulkBar.innerHTML = '';
     }
+
+    renderNotice();
+    renderViews();
+  }
+
+  /* ---- column chooser ---- */
+  function buildColumnPanel() {
+    columnPanel.innerHTML =
+      '<span class="panel-title">Show columns</span>' +
+      COLUMNS.map(
+        (col) => `<label class="switch inline"><input type="checkbox" data-col="${col.field}" checked /><span>${col.label}</span></label>`
+      ).join('') +
+      '<button type="button" class="link-btn" data-col-action="all">Show all</button>';
+  }
+
+  function syncColumnPanel() {
+    columnPanel.querySelectorAll('[data-col]').forEach((box) => {
+      box.checked = !hidden.has(box.dataset.col);
+    });
+  }
+
+  columnsBtn.addEventListener('click', () => {
+    const open = columnPanel.hidden;
+    columnPanel.hidden = !open;
+    columnsBtn.setAttribute('aria-expanded', String(open));
+  });
+
+  columnPanel.addEventListener('change', (event) => {
+    const box = event.target.closest('[data-col]');
+    if (!box) return;
+    const wouldHideEverything = !box.checked && FIELDS.every((field) => hidden.has(field) || field === box.dataset.col);
+    if (wouldHideEverything) {
+      box.checked = true; // a table with no columns is useless: put the box back
+      showToast('At least one column has to stay visible.', 'info');
+      return;
+    }
+    if (box.checked) hidden.delete(box.dataset.col);
+    else hidden.add(box.dataset.col);
+    render();
+  });
+
+  columnPanel.addEventListener('click', (event) => {
+    if (!event.target.closest('[data-col-action="all"]')) return;
+    hidden.clear();
+    syncColumnPanel();
+    render();
+  });
+
+  /* ---- views toolbar ---- */
+  function applyView(view) {
+    activeViewName = view ? view.name : '';
+    applyConfig(view ? view.config : null);
+    render();
+  }
+
+  viewsBox.addEventListener('change', (event) => {
+    if (event.target.id !== 'demoViewSelect') return;
+    applyView(event.target.value === '' ? null : views[Number(event.target.value)]);
+  });
+
+  viewsBox.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-view-action]');
+    if (!button) return;
+    const action = button.dataset.viewAction;
+    const active = views.find((view) => view.name === activeViewName);
+
+    if (action === 'new') {
+      showSaveForm = true;
+      renderViews();
+      const input = viewsBox.querySelector('#demoViewName');
+      if (input) input.focus();
+    } else if (action === 'cancel') {
+      showSaveForm = false;
+      renderViews();
+    } else if (action === 'update' && active) {
+      active.config = currentConfig();
+      persistViews();
+      showToast('View updated.', 'success');
+      renderViews();
+    } else if (action === 'default' && active) {
+      const makeDefault = !active.isDefault;
+      views.forEach((view) => {
+        view.isDefault = false;
+      });
+      active.isDefault = makeDefault;
+      persistViews();
+      showToast(makeDefault ? `"${active.name}" will open by default.` : 'Default view removed.', 'success');
+      renderViews();
+    } else if (action === 'delete' && active) {
+      const confirmed = await mockConfirm({
+        label: 'Delete view',
+        message: `Delete the view "${active.name}"? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        destructive: true
+      });
+      if (!confirmed) return;
+      views = views.filter((view) => view !== active);
+      activeViewName = '';
+      persistViews();
+      showToast('View deleted.', 'success');
+      renderViews();
+    }
+  });
+
+  viewsBox.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const name = viewsBox.querySelector('#demoViewName').value.trim();
+    const makeDefault = viewsBox.querySelector('#demoViewDefault').checked;
+    if (!name) return;
+    const existing = views.find((view) => view.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      const confirmed = await mockConfirm({
+        label: 'Replace view',
+        message: `You already have a view named "${existing.name}". Replace its settings with the table's current ones?`,
+        confirmLabel: 'Replace'
+      });
+      if (!confirmed) return;
+    }
+    const view = existing || { name, isDefault: false, config: null };
+    view.config = currentConfig();
+    if (makeDefault) {
+      views.forEach((other) => {
+        other.isDefault = false;
+      });
+      view.isDefault = true;
+    }
+    if (!existing) views.push(view);
+    activeViewName = view.name;
+    showSaveForm = false;
+    persistViews();
+    showToast('View saved.', 'success');
+    markStep('view');
+    renderViews();
+  });
+
+  /* ---- loading, refreshing and "someone else" ---- */
+  function reload(message) {
+    rows = clone(serverRows);
+    rowErrors = {};
+    selected.clear();
+    pendingChange = false;
+    editing = false;
+    if (message) showToast(message, 'info');
+    render();
+  }
+
+  // Mirrors the datatable's auto-refresh: reload quietly only when nothing is being edited or selected.
+  function reactToLiveChange() {
+    const hasUnsavedEdits = editing || Object.keys(rowErrors).length > 0;
+    markStep('live');
+    if (selected.size === 0 && !hasUnsavedEdits) {
+      const before = new Map(rows.map((row) => [row.id, row.version]));
+      rows = clone(serverRows);
+      flashIds = new Set(rows.filter((row) => before.get(row.id) !== row.version).map((row) => row.id));
+      pendingChange = false;
+      render();
+      showToast('The table updated itself: a record changed elsewhere.', 'info');
+      setTimeout(() => {
+        flashIds.clear();
+        body.querySelectorAll('.row-flash').forEach((rowEl) => rowEl.classList.remove('row-flash'));
+      }, 1600);
+    } else {
+      pendingChange = true;
+      renderNotice();
+    }
+  }
+
+  function simulateColleague() {
+    const target = getFiltered()
+      .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+      .find((row) => row.id !== ALWAYS_FAILS_ID && serverRows.some((server) => server.id === row.id));
+    if (!target) {
+      showToast('There is no record on this page to change.', 'info');
+      return;
+    }
+    const server = serverRows.find((row) => row.id === target.id);
+    const choices = INDUSTRIES.filter((industry) => industry !== server.industry);
+    server.industry = choices[server.version % choices.length];
+    server.version += 1;
+    const stale = liveSwitch.checked ? '' : ' Your table still shows the old value.';
+    showToast(`A colleague changed ${server.name}: Industry is now "${server.industry}".${stale}`, 'info');
+    if (liveSwitch.checked) reactToLiveChange();
+  }
+
+  function resetDemo() {
+    serverRows = clone(SEED_ROWS);
+    rows = clone(serverRows);
+    rowErrors = {};
+    selected.clear();
+    pendingChange = false;
+    editing = false;
+    showSaveForm = false;
+    activeViewName = '';
+    applyConfig(null);
+    conflictSwitch.checked = true;
+    liveSwitch.checked = false;
+    showToast('Demo reset.', 'info');
+    render();
+  }
+
+  /* ---- saving an edit, deleting, copying ---- */
+  function commitEdit(id, field, value, originalValue) {
+    const row = rows.find((candidate) => candidate.id === id);
+    const server = serverRows.find((candidate) => candidate.id === id);
+    if (!row) return;
+    row[field] = value; // the draft stays on screen, as in the datatable
+    markStep('edit');
+
+    if (id === ALWAYS_FAILS_ID) {
+      rowErrors[id] = 'Duplicate account name detected.';
+      showToast('1 saved, 1 failed. See the row for details.', 'error');
+    } else if (!server) {
+      rowErrors[id] = 'This record no longer exists.';
+      showToast('0 saved, 1 failed.', 'error');
+    } else if (conflictSwitch.checked && server.version !== row.version) {
+      rowErrors[id] = CONFLICT_MESSAGE;
+      showToast('0 saved, 1 failed. 1 changed by someone else - refresh to see the latest.', 'error');
+      markStep('conflict');
+    } else {
+      const replacedSomeone = server.version !== row.version && server[field] !== originalValue;
+      const replaced = server[field];
+      server[field] = value;
+      server.version += 1;
+      row.version = server.version;
+      delete rowErrors[id];
+      if (replacedSomeone) {
+        showToast(`Saved - and it replaced a colleague's newer value ("${replaced}"). Turn on Conflict detection to stop that.`, 'info');
+      } else {
+        showToast('Record saved.', 'success');
+      }
+    }
+    render();
   }
 
   async function handleBulkDelete() {
     const count = selected.size;
     const confirmed = await mockConfirm({
       label: 'Delete Records',
-      message: `This will permanently delete ${count} record${count === 1 ? '' : 's'}. This cannot be undone. (This is a mock - GenericDmlService.deleteRecords does the real thing.)`,
+      message: `This will permanently delete ${count} record${count === 1 ? '' : 's'}. This cannot be undone. (This is a mock - GenericDmlService.deleteRecords does the real thing. Use Reset demo to get them back.)`,
       confirmLabel: 'Delete',
       destructive: true
     });
     if (!confirmed) return;
-    rows = rows.filter((r) => !selected.has(r.id));
+    rows = rows.filter((row) => !selected.has(row.id));
+    serverRows = serverRows.filter((row) => !selected.has(row.id));
     showToast(`${count} record${count === 1 ? '' : 's'} deleted.`, 'success');
     selected.clear();
     render();
   }
 
-  function commitEdit(id, field, value) {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    row[field] = value;
-
-    if (id === ALWAYS_FAILS_ID) {
-      rowErrors[id] = 'Duplicate account name detected.';
-      showToast('1 saved, 1 failed. See the row for details.', 'error');
+  async function handleCopyIds() {
+    const ids = rows.filter((row) => selected.has(row.id)).map((row) => row.sfid);
+    const copied = await copyToClipboard(ids.join('\n'));
+    if (copied) {
+      showToast(`${ids.length} Id${ids.length === 1 ? '' : 's'} copied. Paste them anywhere.`, 'success');
+      markStep('copy');
     } else {
-      delete rowErrors[id];
-      showToast('Record saved.', 'success');
+      showToast('Could not copy. Select the text and press Ctrl+C.', 'error');
     }
-    render();
   }
 
+  /* ---- events ---- */
   headRow.addEventListener('click', (event) => {
     const th = event.target.closest('th[data-field]');
     if (!th) return;
@@ -437,6 +867,7 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
       sortField = field;
       sortDir = 'asc';
     }
+    markStep('explore');
     render();
   });
 
@@ -454,17 +885,22 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
     if (!cell || cell.querySelector('input')) return;
     const id = cell.dataset.id;
     const field = cell.dataset.field;
-    const row = rows.find((r) => r.id === id);
+    const row = rows.find((candidate) => candidate.id === id);
     const originalValue = row[field];
-    cell.innerHTML = `<input type="text" value="${escapeHtml(String(originalValue))}" />`;
+    cell.innerHTML = `<input type="text" value="${escapeHtml(String(originalValue)).replace(/"/g, '&quot;')}" />`;
     const input = cell.querySelector('input');
     input.focus();
     input.select();
+    editing = true;
 
+    let finished = false;
     function finish(commit) {
+      if (finished) return; // Enter and the blur it causes must not save twice
+      finished = true;
+      editing = false;
       const newValue = input.value;
       if (commit && newValue !== String(originalValue)) {
-        commitEdit(id, field, newValue);
+        commitEdit(id, field, newValue, originalValue);
       } else {
         render();
       }
@@ -489,20 +925,22 @@ function mockConfirm({ label, message, confirmLabel, destructive }) {
     searchDebounce = setTimeout(() => {
       searchTerm = searchBox.value;
       page = 1;
+      markStep('explore');
       render();
     }, 250);
   });
-  refreshBtn.addEventListener('click', () => {
-    rows = ORIGINAL_ROWS.map((r) => ({ ...r }));
-    rowErrors = {};
-    selected.clear();
-    searchTerm = '';
-    searchBox.value = '';
-    page = 1;
-    showToast('Refreshed.', 'info');
-    render();
-  });
+  refreshBtn.addEventListener('click', () => reload('Refreshed - you are looking at the latest data.'));
+  simulateBtn.addEventListener('click', simulateColleague);
+  resetBtn.addEventListener('click', resetDemo);
 
+  /* ---- start ---- */
+  buildColumnPanel();
+  views = loadViews();
+  const defaultView = views.find((view) => view.isDefault);
+  if (defaultView) {
+    activeViewName = defaultView.name;
+    applyConfig(defaultView.config);
+  }
   render();
 })();
 

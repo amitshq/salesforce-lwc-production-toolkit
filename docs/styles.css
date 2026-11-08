@@ -165,18 +165,6 @@ header.site {
   padding: 64px 0 40px;
 }
 
-.hero .badges {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.hero .badges img {
-  height: 20px;
-  display: block;
-}
-
 .hero h1 {
   font-size: clamp(28px, 4.5vw, 44px);
   line-height: 1.15;
@@ -355,8 +343,18 @@ footer.site a {
   .two-col {
     grid-template-columns: 1fr;
   }
+  .nav {
+    padding: 10px 0;
+  }
+  /* One scrolling row under the brand instead of a nav that wraps and eats a quarter of the screen. */
   .nav .links {
-    gap: 14px;
+    order: 3;
+    width: 100%;
+    gap: 16px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 2px;
   }
 }
 
@@ -1039,4 +1037,333 @@ td.editable-cell input {
 .demo-kpi strong {
   font-size: 20px;
   font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================================
+   Simpler page: hero stats, the playground, goal filter, and numbered steps
+   ========================================================================= */
+.stats {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 26px 0 0;
+  padding: 0;
+  font-size: 14px;
+  color: var(--fg-muted);
+}
+
+.stats strong {
+  color: var(--fg);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 6px 4px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.switch small {
+  display: block;
+  margin-top: 2px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.switch.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.badge-soft {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  color: var(--accent);
+}
+
+/* playground: the mock table next to a short list of things to try */
+.playground {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+.try-panel {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+}
+
+.try-panel h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.try-progress {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.try-list {
+  list-style: none;
+  counter-reset: step;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.try-list li {
+  position: relative;
+  counter-increment: step;
+  padding: 8px 0 8px 34px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.try-list li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-alt);
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.try-list li.done {
+  color: var(--fg-muted);
+}
+
+.try-list li.done::before {
+  content: "\2713";
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg);
+}
+
+.switches {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 16px;
+}
+
+.try-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.try-note {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.demo-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-alt);
+}
+
+.demo-panel[hidden] {
+  display: none;
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+}
+
+.demo-views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.views-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.views-label select,
+.view-form input[type="text"] {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.view-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: 100%;
+  padding-top: 4px;
+}
+
+.demo-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  font-size: 13.5px;
+}
+
+.demo-notice[hidden] {
+  display: none;
+}
+
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@keyframes rowFlash {
+  from {
+    background: color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+table.demo-table tbody tr.row-flash {
+  animation: rowFlash 1.6s ease-out;
+}
+
+/* goal filter above the pieces */
+.goal-blurb {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: 14px;
+  color: var(--fg-muted);
+}
+
+/* get started: three numbered steps */
+.steps {
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+}
+
+.steps > li {
+  position: relative;
+  counter-increment: step;
+  padding-left: 48px;
+  min-width: 0; /* let a long command scroll inside its box instead of widening the page */
+}
+
+.steps pre {
+  overflow-x: auto;
+}
+
+.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 700;
+}
+
+.steps h3 {
+  margin: 4px 0 8px;
+  font-size: 17px;
+}
+
+.start-note {
+  margin-top: 22px;
+  color: var(--fg-muted);
+}
+
+@media (max-width: 900px) {
+  .playground {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  table.demo-table tbody tr.row-flash {
+    animation: none;
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+  }
 }

@@ -11,6 +11,16 @@ Notable changes, newest first. Dates are UTC. The website's banner and release t
 - **`c-copy-button`.** A copy button that confirms itself: a check-mark icon, a toast (de-duplicated), a screen-reader message, and `copied` / `copyerror` events. It is disabled while there is nothing to copy.
 - A **Copy Ids** bulk action in the datatable demo.
 
+### Changed
+
+- **A simpler README.** It now goes from clone to running demo in a few lines, shows the one table component and the attributes that switch features on, and folds the full list of pieces into collapsible groups by goal. That list is generated from `docs/catalog.js` and `docs/goals.js` (`npm run docs:readme`), and `npm run test:site` fails if it goes stale.
+- **A simpler, more hands-on website.** A shorter page with a "Try it" playground that mocks the newest features: conflict detection (with a button that plays a colleague changing a record), live refresh, a column chooser, saved views that survive a reload, and Copy Ids, plus a checklist that ticks off as you try each one. Pieces are found by what you want to do, not by code category. Usage snippets in the catalog copy with one click.
+- The test-count badge and counts are gone from the README and website, since they went stale with every change.
+
+### Fixed
+
+- The website's "Get started" steps no longer make the page scroll sideways on a phone, and the phone navigation takes one row instead of a quarter of the screen.
+
 ## [2.0.0] - 2026-10-17
 
 ### Added

@@ -1339,12 +1339,13 @@ Backs `c-file-upload-manager`. Reads/deletes `ContentDocument`/`ContentDocumentL
 
 ```bash
 npm install
-npm test             # Jest — 435 tests across every LWC/util module
-npm run test:site     # the website's release timer, catalog and permission-set coverage (29 checks, node --test)
+npm test             # Jest unit tests for every LWC/util module
+npm run test:site     # the website's release timer, catalog, goals and permission-set coverage, and the README index (node --test)
+npm run docs:readme   # rebuild the README's "What's inside" list after editing docs/catalog.js or docs/goals.js
 npm run lint          # ESLint
 ```
 
-Apex tests (`*Test.cls`, 67 methods) run in your org:
+Apex tests (`*Test.cls`) run in your org:
 
 ```bash
 sf apex run test -o lwc-toolkit -c -r human

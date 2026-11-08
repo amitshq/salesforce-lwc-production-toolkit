@@ -1,222 +1,215 @@
 # salesforce-lwc-production-toolkit
 
-**[Website](https://amitshq.github.io/salesforce-lwc-production-toolkit/)** &middot; **[Usage guide](USAGE.md)** &middot; **[Changelog](CHANGELOG.md)** &middot; **[Contributing](CONTRIBUTING.md)** (PRs go to `dev`)
+Ready-made Lightning Web Components and Apex services for the things every Salesforce project ends up rebuilding: a server-side table, CSV import, KPI cards, saved views, and the helpers around them. Built once, tested, and documented, with no bespoke Apex controller per object.
 
-Reusable, production-grade Lightning Web Components and Apex services for the pieces every Salesforce project ends up rebuilding: a generic server-side datatable, a modal framework, error/state handling, and the small utility functions that don't deserve a bespoke implementation per project.
+**[Try it in your browser](https://amitshq.github.io/salesforce-lwc-production-toolkit/)** (no org needed) &middot; [Usage guide](USAGE.md) &middot; [Changelog](CHANGELOG.md) &middot; [Contributing](CONTRIBUTING.md)
 
-This is not a `lightning-button` wrapper library. Everything here either does something non-trivial (server-side pagination + partial-error reporting) or removes genuine, repeated boilerplate (Apex/LDS error parsing, debounce, nested-path access).
+## Get started in two minutes
 
-## What's new in v2.0.0
-
-Six features for production tables, each with tests, docs and a place in the demo (full detail in the [changelog](CHANGELOG.md)):
-
-- **Conflict-safe saves** - `enable-conflict-detection` rejects an inline edit that would overwrite a colleague's newer change, instead of silently winning.
-- **CSV import wizard** - [`csvImportWizard`](force-app/main/default/lwc/csvImportWizard): upload, map columns, review row-level problems, import in chunks with per-row error reporting.
-- **Aggregate KPIs** - [`GenericAggregateService`](force-app/main/default/classes/GenericAggregateService.cls) (COUNT/SUM/AVG/MIN/MAX with GROUP BY) and [`aggregateKpiCard`](force-app/main/default/lwc/aggregateKpiCard), a KPI tile that computes its own number and trend.
-- **Saved views** - `view-key` gives each user named, private layouts (columns, sort, search, filters) and a default view that opens automatically.
-- **Column chooser** - `enable-column-chooser` lets users hide and show columns.
-- **Live refresh** - `auto-refresh` follows Change Data Capture events without ever discarding an edit in progress.
-
-The [website](https://amitshq.github.io/salesforce-lwc-production-toolkit/) shows what's new with a live "live for N days" timer and a countdown to the next version.
-
-## Why
-
-Every Salesforce project eventually builds some version of a server-side, sortable, filterable, editable datatable with bulk actions - and re-derives the same Apex error parsing, the same modal boilerplate, the same loading/empty/error branch. This package is that "some version," built once, tested, and documented, so the question stops being "why are we rebuilding this again?"
-
-## Requirements
-
-- Salesforce CLI (`sf`), authenticated to a Dev Hub or sandbox
-- API 61.0+ org (Summer '24+) - the toolkit uses `AccessLevel.USER_MODE`, `Security.stripInaccessible`, `Database.queryWithBinds`/`countQueryWithBinds`, and `lightning/modal`, all of which need a reasonably current org
-- Node.js 18+ (for linting/Jest only - not required to deploy)
-
-## Setup
+You need the Salesforce CLI (`sf`) and an org on API 61.0 or newer. Node 18+ is only for running the tests.
 
 ```bash
+git clone https://github.com/amitshq/salesforce-lwc-production-toolkit.git
+cd salesforce-lwc-production-toolkit
 sf org create scratch -f config/project-scratch-def.json -a lwc-toolkit -d 7
 sf project deploy start -o lwc-toolkit
 sf org assign permset -o lwc-toolkit -n LWCToolkitAdmin
 sf org open -o lwc-toolkit
 ```
 
-`LWCToolkitAdmin` grants access to the Apex services, the `Toolkit_Bulk_Edit` custom permission, read access to the `ToolkitDemoSetting__mdt` custom metadata fields, and the `ToolkitSavedView__c` object behind saved views. Assign it to any user who should see the demo data load correctly.
+Then drop **Enterprise Datatable Demo (Accounts)** onto an App, Record or Home page in Lightning App Builder. It shows most of the toolkit working against Account.
 
-Two features need a one-off setup in the org: **live refresh** needs Change Data Capture enabled for the object (Setup, Integrations, Change Data Capture), and **saved views** need the `ToolkitSavedView__c` object deployed, which `sf project deploy start` does for you.
+Only need one piece? Copy its folder from `force-app/main/default/lwc/`, plus any Apex classes it names in the [usage guide](USAGE.md), into your own project.
 
-Then drop **Enterprise Datatable Demo (Accounts)** onto an App Page, Record Page, or Home Page from Lightning App Builder to see the whole pipeline running against Account, or open `enterpriseDatatableDemo` for the wiring pattern to copy for your own object.
+## The one-minute tour
 
-### Local development (linting/tests only)
-
-```bash
-npm install
-npm test            # Jest unit tests for every LWC/util module
-npm run test:site   # the website's release timer and catalog (node --test, no extra install)
-npm run lint         # ESLint
-npm run prettier     # format everything
-```
-
-435 Jest tests, 29 website checks and 67 Apex test methods cover the components and services below. The Apex tests run in an org (`sf apex run test -o lwc-toolkit -c -r human`); the Apex added for v2 has not yet been run in one.
-
-## Architecture
-
-```
-force-app/main/default/
-├── classes/          Generic Apex services (query, DML, aggregates, saved views, permissions, custom metadata, files)
-├── customMetadata/   Demo config record consumed by metadataUtils
-├── customPermissions/  Toolkit_Bulk_Edit, gating bulk edit/delete in the demo
-├── messageChannels/   ToolkitMessageChannel, backing lmsUtils
-├── objects/           ToolkitDemoSetting__mdt (the demo's configuration type), ToolkitSavedView__c (saved views)
-├── permissionsets/     LWCToolkitAdmin
-└── lwc/
-    ├── enterpriseDatatable/       the flagship component
-    ├── enterpriseDatatableDemo/   ready-to-drop Account example
-    ├── multiSelectLookup, dynamicFilterPanel, dynamicForm, pagination,
-    │   fileUploadManager, imageGallery, csvImportWizard,
-    │   aggregateKpiCard, datatableViewBar, columnChooser    other data components
-    ├── modal, confirmDialog, wizard, stateManager, emptyState, errorState,
-    │   bulkActionBar, infiniteScrollLoader, permissionGate, featureGate,
-    │   kpiCard, dateRangePicker, copyButton               UX components
-    └── functionUtils, objectUtils, jsonUtils, csvUtils, csvImportEngine, clipboardUtils, urlUtils,
-        apexErrorUtils, ldsErrorUtils, navigationUtils, recordUtils, permissionUtils,
-        metadataUtils, toastService, lmsUtils, empUtils    data/Salesforce utility modules
-```
-
-### The generic Apex layer
-
-Rather than a bespoke `@AuraEnabled` controller per object, a handful of schema-driven services back everything:
-
-- **`GenericQueryService.query(...)`** - dynamic SOQL: object/field/filter identifiers are validated against the running user's schema describe (never concatenated as literals), values are always bound via `Database.queryWithBinds`/`countQueryWithBinds`, and the query itself runs under `AccessLevel.USER_MODE` as a second layer of CRUD/FLS enforcement. Supports paging, sorting, per-field filters, and a multi-field `LIKE` search.
-- **`GenericDmlService.saveRecords(...)` / `.deleteRecords(...)`** - bulk insert/update/delete with `allOrNone=false`, `Security.stripInaccessible` for FLS, and a `DmlResult` per row (correlated by `rowKey`) so a batch save reports exactly which rows failed instead of aborting the whole batch. An update can carry the `SystemModstamp` it was loaded with (`expectedModstamp`); if the record has changed since, that row fails with `isConflict` instead of overwriting the newer change. This is a compare-then-write check, not a lock: it narrows the window rather than closing it.
-- **`GenericAggregateService.aggregate(...)`** - COUNT/SUM/AVG/MIN/MAX with optional GROUP BY, reusing the query service's identifier validation and bound filter values. Unlike the query service it rejects an unknown field, a bad alias or a SUM on a text field rather than dropping it, because a dropped aggregate would return a different number than the one asked for.
-- **`SavedViewService`** - per-user saved views in the Private `ToolkitSavedView__c` object. Every query filters on the running user as well as running in user mode, so a user with View All Data still cannot read another user's views.
-- **`PermissionService`** - object/field access checks and a custom-permission check (via `SetupEntityAccess`/`PermissionSetAssignment`, since Apex has no direct "does this user have this custom permission" API).
-- **`CustomMetadataService`** - generic Custom Metadata Type reader, validated to only ever query `__mdt` objects.
-
-### The flagship: `c-enterprise-datatable`
-
-```
-Server-side query → Pagination → Filtering → Sorting → Inline editing → Bulk update → Partial errors → Refresh
-```
-
-Point it at an object and a (mostly standard `lightning-datatable`) column array:
+The flagship is a table that does the server-side work for you. Point it at an object and a list of columns:
 
 ```html
 <c-enterprise-datatable
     object-api-name="Account"
     title="Accounts"
     columns={columns}
-    page-size="25"
-    pagination-mode="pages"
     search-fields={searchFields}
-    bulk-actions={bulkActions}
-    enable-row-selection
-    enable-bulk-delete
     default-sort-field="Name"
-    onbulkaction={handleBulkAction}
 ></c-enterprise-datatable>
 ```
 
 ```js
 columns = [
     { label: 'Name', fieldName: 'Name', type: 'text', editable: true, filterable: true },
-    { label: 'Owner', fieldName: 'Owner.Name', type: 'text' } // relationship fields are auto-flattened
+    { label: 'Owner', fieldName: 'Owner.Name', type: 'text' } // relationship fields are flattened for you
 ];
+searchFields = ['Name', 'Industry'];
 ```
 
-What it does with that config:
+That gives you a server-side query, paging, sorting, per-column filters, search, inline editing where a failed row reports its own error and the rest still save, and a refresh button. Turn on more with an attribute:
 
-- **Server-side query** via `GenericQueryService`, fields derived automatically from your `columns`.
-- **Pagination**: `pagination-mode="pages"` (Previous/Next + a page indicator) or `"infinite"` (a `c-infinite-scroll-loader` sentinel at the bottom, IntersectionObserver-based).
-- **Filtering**: any column with `filterable: true` gets a quick-filter input; `filterOperator` (default `'='`) controls the SOQL operator per column.
-- **Sorting**: native `lightning-datatable` column-header sort, re-queried server-side.
-- **Multi-select + bulk actions**: `enable-row-selection` turns on the checkbox column; selected rows drive `c-bulk-action-bar`. Pass your own `bulk-actions` (re-emitted as a `bulkaction` event for you to handle) and/or set `enable-bulk-delete` for a built-in destructive action, gated on `PermissionService.checkObjectAccess(...).isDeletable` and a `c-confirm-dialog` confirmation.
-- **Inline editing → bulk update → partial errors**: edited rows save through `GenericDmlService.saveRecords` in one batch; failed rows stay in `draft-values` and are marked via `lightning-datatable`'s `errors` prop with the server's message, while successful rows commit and fire a success toast - a save of 20 rows where 2 fail doesn't lose your other 18 edits.
-- **Refresh**: a header button, plus a public `@api refresh()` for a parent (or a Lightning quick action) to call.
-- **Conflict detection** (`enable-conflict-detection`): rows that someone else changed after you loaded them are rejected with a message to refresh, and the rest of your batch still saves.
-- **Column chooser** (`enable-column-chooser`): a header button opens a checkbox panel; the last visible column cannot be hidden. Every column is still queried, so toggling is instant.
-- **Saved views** (`view-key="accounts-main"`): a toolbar to save the current columns, sort, search and filters under a name, reopen, update, delete, and choose one to open by default. The first query waits for the default view so the table loads once. Views are private to each user. `currentConfig` and `applyConfig(config)` expose the same layout to your own code.
-- **Live refresh** (`auto-refresh`): when records of the object change (Change Data Capture), a page-mode table with no unsaved edits and nothing selected reloads quietly; otherwise it shows a "records changed" bar and leaves the choice to the user. A reload under an edit would refresh the loaded `SystemModstamp`, which would defeat conflict detection. Changes from the table's own saves are ignored, and `liveerror` is fired if the subscription cannot be made.
-- Relationship-path columns (`fieldName: 'Owner.Name'`) are queried as-is and flattened onto an alias key, since `lightning-datatable` requires flat, dot-free field names.
-
-`c-enterprise-datatable-demo` wires all of this against Account, including reading the default page size from `ToolkitDemoSetting__mdt` via `metadataUtils` and gating its bulk-delete action on the `Toolkit_Bulk_Edit` custom permission via `permissionUtils` - copy that component as the starting point for your own object.
-
-## Feature map
-
-### Data components
-
-| Requested | Where |
+| Add | And you get |
 |---|---|
-| Generic server-side datatable | [`enterpriseDatatable`](force-app/main/default/lwc/enterpriseDatatable) + [`GenericQueryService`](force-app/main/default/classes/GenericQueryService.cls) |
-| Infinite scrolling | [`infiniteScrollLoader`](force-app/main/default/lwc/infiniteScrollLoader) (standalone) + `enterpriseDatatable`'s `pagination-mode="infinite"` |
-| Server-side pagination | `enterpriseDatatable`'s `pagination-mode="pages"`, `GenericQueryService` offset/limit |
-| CSV import | [`csvImportWizard`](force-app/main/default/lwc/csvImportWizard) + [`csvImportEngine`](force-app/main/default/lwc/csvImportEngine) - map, review, chunked import with per-row errors |
-| Aggregates / KPI from data | [`aggregateKpiCard`](force-app/main/default/lwc/aggregateKpiCard) + [`GenericAggregateService`](force-app/main/default/classes/GenericAggregateService.cls) |
-| Saved views | `enterpriseDatatable`'s `view-key` + [`datatableViewBar`](force-app/main/default/lwc/datatableViewBar) + [`SavedViewService`](force-app/main/default/classes/SavedViewService.cls) |
-| Column chooser | `enterpriseDatatable`'s `enable-column-chooser` + [`columnChooser`](force-app/main/default/lwc/columnChooser) |
-| Sorting/filtering | `enterpriseDatatable` column sort + per-column `filterable` quick filters |
-| Multi-select | `enterpriseDatatable`'s `enable-row-selection` (native `lightning-datatable` checkboxes) |
-| Inline editing | `enterpriseDatatable`'s `draft-values`/`onsave` wired to `GenericDmlService` |
-| Bulk actions | [`bulkActionBar`](force-app/main/default/lwc/bulkActionBar) (standalone) + `enterpriseDatatable`'s `bulk-actions`/`enable-bulk-delete` |
-| Advanced data table | `enterpriseDatatable` above &mdash; this *is* that component, not a second one |
-| Multi-select lookup | [`multiSelectLookup`](force-app/main/default/lwc/multiSelectLookup) - type-to-search against any object via `GenericQueryService` |
-| Dynamic filter panel | [`dynamicFilterPanel`](force-app/main/default/lwc/dynamicFilterPanel) - builds `QueryFilter[]` for `GenericQueryService`/`enterpriseDatatable` |
-| Dynamic form | [`dynamicForm`](force-app/main/default/lwc/dynamicForm) - renders from a field-config array, field-level-access-aware |
-| Pagination / keyset pagination | [`pagination`](force-app/main/default/lwc/pagination) (standalone) + [`GenericQueryService.queryWithCursor`](force-app/main/default/classes/GenericQueryService.cls) |
-| File upload manager | [`fileUploadManager`](force-app/main/default/lwc/fileUploadManager) + [`FileManagerService.cls`](force-app/main/default/classes/FileManagerService.cls) |
-| Image gallery | [`imageGallery`](force-app/main/default/lwc/imageGallery) - thumbnail grid + `c-modal` lightbox |
+| `enable-row-selection` | Checkboxes and a bulk-action bar |
+| `enable-bulk-delete` | A confirmed Delete action, shown only if the user is allowed to delete |
+| `pagination-mode="infinite"` | Scroll to load more instead of pages |
+| `enable-conflict-detection` | An edit is refused, not silently written over, if someone else changed the record meanwhile |
+| `enable-column-chooser` | Users hide and show columns |
+| `view-key="accounts-main"` | Private saved views, with a default that opens automatically |
+| `auto-refresh` | The table follows changes made elsewhere (needs Change Data Capture) |
 
-### UX components
+Every attribute, event and method is in the [usage guide](USAGE.md#enterprise-datatable).
 
-| Requested | Where |
-|---|---|
-| Modal framework | [`modal`](force-app/main/default/lwc/modal) - slot-based, focus-trapped, works anywhere (Experience Cloud/LWR included) |
-| Confirmation dialog | [`confirmDialog`](force-app/main/default/lwc/confirmDialog) - promise-based, built on `lightning/modal` |
-| Toast manager | [`toastService`](force-app/main/default/lwc/toastService) - consistent `ShowToastEvent` dispatch with de-duplication |
-| Loading/state manager | [`stateManager`](force-app/main/default/lwc/stateManager) |
-| Empty-state component | [`emptyState`](force-app/main/default/lwc/emptyState) |
-| Error-state component | [`errorState`](force-app/main/default/lwc/errorState) |
-| Wizard/stepper | [`wizard`](force-app/main/default/lwc/wizard) - `lightning-progress-indicator` + cancelable `beforestepchange` for per-step validation |
-| Confirmation modal | `confirmDialog` above |
-| Error panel | `errorState` above |
-| Permission-aware component | [`permissionGate`](force-app/main/default/lwc/permissionGate) - gates slotted content on object/field/custom-permission checks |
-| Metadata-driven configuration provider | [`featureGate`](force-app/main/default/lwc/featureGate) - feature-flag gating driven by any Custom Metadata Type |
-| KPI dashboard card | [`kpiCard`](force-app/main/default/lwc/kpiCard) |
-| Date range picker | [`dateRangePicker`](force-app/main/default/lwc/dateRangePicker) - with quick-range presets |
-| Copy button | [`copyButton`](force-app/main/default/lwc/copyButton) - copies a value and confirms it: check-mark icon, toast, screen-reader message |
+## What's inside
 
-### Data utilities
+Pick what you are trying to do. Each piece links to its folder; the usage guide has the full reference.
 
-| Requested | Where |
-|---|---|
-| Debounce/throttle | [`functionUtils`](force-app/main/default/lwc/functionUtils) |
-| Deep clone | [`objectUtils.deepClone`](force-app/main/default/lwc/objectUtils/objectUtils.js) |
-| Object comparison | [`objectUtils.isEqual`](force-app/main/default/lwc/objectUtils/objectUtils.js) |
-| Nested property access | [`objectUtils.getNestedValue`/`setNestedValue`](force-app/main/default/lwc/objectUtils/objectUtils.js) |
-| JSON formatting | [`jsonUtils`](force-app/main/default/lwc/jsonUtils) |
-| URL/query parameter helpers | [`urlUtils`](force-app/main/default/lwc/urlUtils) |
-| CSV export and parsing | [`csvUtils`](force-app/main/default/lwc/csvUtils) - RFC 4180 escaping, parsing and browser download (the demo's Export CSV action and the import wizard) |
-| Clipboard copy | [`clipboardUtils`](force-app/main/default/lwc/clipboardUtils) - Clipboard API with a textarea fallback that restores focus and cleans up after itself; copies a list one item per line (the demo's Copy Ids action) |
+<!-- inside:start - generated by "npm run docs:readme" from docs/goals.js and docs/catalog.js; do not edit by hand -->
 
-### Salesforce utilities
+<details>
+<summary><b>Show records in a table</b> &middot; 9 pieces</summary>
 
-| Requested | Where |
-|---|---|
-| Apex error parser | [`apexErrorUtils`](force-app/main/default/lwc/apexErrorUtils) |
-| LDS error parser | [`ldsErrorUtils`](force-app/main/default/lwc/ldsErrorUtils) |
-| Navigation helpers | [`navigationUtils`](force-app/main/default/lwc/navigationUtils) |
-| Record refresh helpers | [`recordUtils`](force-app/main/default/lwc/recordUtils) - pairs `refreshApex` with `notifyRecordUpdateAvailable` in one call |
-| Permission checking | [`permissionUtils`](force-app/main/default/lwc/permissionUtils) + [`PermissionService.cls`](force-app/main/default/classes/PermissionService.cls) |
-| Custom metadata configuration loader | [`metadataUtils`](force-app/main/default/lwc/metadataUtils) + [`CustomMetadataService.cls`](force-app/main/default/classes/CustomMetadataService.cls) |
-| LMS (Lightning Message Service) wrapper | [`lmsUtils`](force-app/main/default/lwc/lmsUtils) + [`ToolkitMessageChannel`](force-app/main/default/messageChannels) |
-| Change Data Capture subscription | [`empUtils`](force-app/main/default/lwc/empUtils) - channel naming, event normalizing and an idempotent unsubscribe over `lightning/empApi` |
+A server-side table with paging, sorting, filters, inline edit, saved views and bulk actions.
 
-## Known limitations / extension points
+- [`c-enterprise-datatable`](force-app/main/default/lwc/enterpriseDatatable) - The flagship: server-side query, pagination, sorting, filtering, inline edit, bulk actions, and partial-error reporting for any object.
+- [`c-column-chooser`](force-app/main/default/lwc/columnChooser) - A checkbox panel for choosing which table columns are shown; the last visible column cannot be hidden.
+- [`c-datatable-view-bar`](force-app/main/default/lwc/datatableViewBar) - The saved-views toolbar behind the datatable's view-key: pick, save, update, delete and default a view.
+- [`c-pagination`](force-app/main/default/lwc/pagination) - Standalone Previous / Next + numbered page control, fully controlled by props.
+- [`c-infinite-scroll-loader`](force-app/main/default/lwc/infiniteScrollLoader) - IntersectionObserver-based "load more" sentinel, reusable for any list or grid.
+- [`c-bulk-action-bar`](force-app/main/default/lwc/bulkActionBar) - "N selected" toolbar for any multi-select list, independent of the datatable.
+- [`GenericQueryService.cls`](force-app/main/default/classes/GenericQueryService.cls) - Schema-driven dynamic SOQL: pagination, sorting, filtering, and search for any object - no bespoke controller.
+- [`GenericDmlService.cls`](force-app/main/default/classes/GenericDmlService.cls) - Bulk insert/update/delete with allOrNone=false and a per-row result, so one bad row never blocks the batch.
+- [`SavedViewService.cls`](force-app/main/default/classes/SavedViewService.cls) - Per-user saved views for datatables, stored in the Private ToolkitSavedView__c object.
 
-- The App Builder property panel only exposes `enterpriseDatatable`'s primitive properties (object, title, page size, ...) - `columns`, `staticFilters`, `bulkActions`, and `searchFields` are arrays/objects and must be set by wrapping the component in your own LWC (as `enterpriseDatatableDemo` does), not by an admin in Lightning App Builder.
-- `GenericDmlService` supports insert/update/delete; it does not run Apex triggers differently than any other DML, so validation rules/triggers on the target object still apply and their errors surface through the normal partial-error path.
-- Custom Metadata field-level filtering in `metadataUtils`/`CustomMetadataService` returns full records (no server-side filtering by field value) - it's a configuration loader, not a query engine; use `GenericQueryService` if you need to query a `__mdt` type with filters.
-- `dynamicForm`'s `picklist` field type doesn't call `getPicklistValuesByRecordType` for you - pass `options` explicitly, since record-type-aware picklists are a meaningfully bigger feature than this component takes on.
-- Conflict detection and `GenericAggregateService` are covered by test classes and review, not yet by a run in an org. Conflict detection is best effort: two saves landing in the same instant can still both pass the check.
-- Saved views are stored per user in `ToolkitSavedView__c`, so deleting the object or removing a user's access to it disables the view bar (the table itself still loads). Two browser tabs saving a default at the same moment can leave two defaults; the table applies the first it finds.
-- Live refresh needs Change Data Capture enabled for the object, only covers objects that support it, and never replays missed events - a table opened after a change simply loads the current data.
-- `GenericAggregateService` caps group-by fields at 3 and groups at 200 and has no date-bucket grouping (`CALENDAR_MONTH` and friends) yet.
-- `GenericQueryService.queryWithCursor` (keyset pagination) is always sorted `Id ASC` - it doesn't support arbitrary-field sort with tie-breaking, which is a substantially more complex feature; use `query()` (offset pagination) when you need to sort by something else.
+</details>
+
+<details>
+<summary><b>Import and export CSV</b> &middot; 3 pieces</summary>
+
+Bring a CSV in with row-by-row errors, and send one out without spreadsheet formula surprises.
+
+- [`c-csv-import-wizard`](force-app/main/default/lwc/csvImportWizard) - Upload a CSV, map its columns, review what will happen, then import in chunks with per-row error reporting.
+- [`csvImportEngine`](force-app/main/default/lwc/csvImportEngine) - The UI-free logic behind the import wizard: map headers to fields, convert cells to typed values, validate every row.
+- [`csvUtils`](force-app/main/default/lwc/csvUtils) - RFC 4180 CSV build + browser download for datatable / bulk-action exports.
+
+</details>
+
+<details>
+<summary><b>Show numbers and KPIs</b> &middot; 4 pieces</summary>
+
+KPI tiles and aggregates (count, sum, average, min, max) computed on the server.
+
+- [`c-aggregate-kpi-card`](force-app/main/default/lwc/aggregateKpiCard) - A KPI tile that computes its own COUNT / SUM / AVG / MIN / MAX server-side, with an optional period-over-period trend.
+- [`c-kpi-card`](force-app/main/default/lwc/kpiCard) - A single stat tile: value, label, optional trend and icon. Presentational; use c-aggregate-kpi-card to have it compute the number.
+- [`GenericAggregateService.cls`](force-app/main/default/classes/GenericAggregateService.cls) - COUNT / SUM / AVG / MIN / MAX with optional GROUP BY for any object, with the same safety model as the query service.
+- [`c-date-range-picker`](force-app/main/default/lwc/dateRangePicker) - Two date inputs with quick-range presets, validated, emitting ISO dates ready for a QueryFilter.
+
+</details>
+
+<details>
+<summary><b>Forms, lookups and files</b> &middot; 7 pieces</summary>
+
+Forms from a config array, record pickers, step-by-step wizards, and file upload and viewing.
+
+- [`c-dynamic-form`](force-app/main/default/lwc/dynamicForm) - Renders a form from a plain field-config array, field-level-access aware; pairs with GenericDmlService.saveRecords.
+- [`c-multi-select-lookup`](force-app/main/default/lwc/multiSelectLookup) - Type-to-search against any object, pick several records, remove them as pills. No bespoke Apex.
+- [`c-dynamic-filter-panel`](force-app/main/default/lwc/dynamicFilterPanel) - Builds filter conditions and emits them in exactly the QueryFilter shape GenericQueryService expects.
+- [`c-wizard`](force-app/main/default/lwc/wizard) - Multi-step flow with a progress indicator and cancelable per-step validation.
+- [`c-file-upload-manager`](force-app/main/default/lwc/fileUploadManager) - Upload, list and delete the files attached to a record, backed by FileManagerService.
+- [`c-image-gallery`](force-app/main/default/lwc/imageGallery) - Thumbnail grid with a click-to-enlarge lightbox (Previous / Next and arrow keys).
+- [`FileManagerService.cls`](force-app/main/default/classes/FileManagerService.cls) - List and delete the files attached to a record, backing c-file-upload-manager.
+
+</details>
+
+<details>
+<summary><b>Dialogs, toasts and states</b> &middot; 7 pieces</summary>
+
+Modals, confirmations, toasts, loading, empty and error states, and a copy button that confirms itself.
+
+- [`c-modal`](force-app/main/default/lwc/modal) - Declarative, slot-based modal framework for content authored inline in a template. Works in Experience Cloud/LWR too.
+- [`c-confirm-dialog`](force-app/main/default/lwc/confirmDialog) - Promise-based confirmation dialog built on the platform lightning/modal service.
+- [`toastService`](force-app/main/default/lwc/toastService) - Consistent ShowToastEvent dispatch with de-duplication (suppresses an identical toast fired twice within 3s).
+- [`c-state-manager`](force-app/main/default/lwc/stateManager) - The loading/error/empty/content branch, so you don't write it by hand in every component.
+- [`c-empty-state`](force-app/main/default/lwc/emptyState) - Presentational "no data" placeholder with an actions slot, used standalone or via c-state-manager.
+- [`c-error-state`](force-app/main/default/lwc/errorState) - Presentational error placeholder with a retry button and collapsible raw-error details.
+- [`c-copy-button`](force-app/main/default/lwc/copyButton) - A copy-to-clipboard button that confirms it worked: check-mark icon, toast, and a screen-reader message.
+
+</details>
+
+<details>
+<summary><b>Access and settings</b> &middot; 6 pieces</summary>
+
+Show or hide things by permission or feature flag, and read org settings from custom metadata.
+
+- [`c-permission-gate`](force-app/main/default/lwc/permissionGate) - Shows slotted content only if the user passes the object / field / custom-permission checks. UI only, not the security boundary.
+- [`c-feature-gate`](force-app/main/default/lwc/featureGate) - Feature flags driven by Custom Metadata: flip a feature per org by editing a record, no deployment.
+- [`permissionUtils`](force-app/main/default/lwc/permissionUtils) - Session-memoized client wrapper over PermissionService.cls.
+- [`PermissionService.cls`](force-app/main/default/classes/PermissionService.cls) - Object/field/custom-permission checks, backing permissionUtils.js.
+- [`metadataUtils`](force-app/main/default/lwc/metadataUtils) - Session-cached client wrapper over CustomMetadataService.cls.
+- [`CustomMetadataService.cls`](force-app/main/default/classes/CustomMetadataService.cls) - Generic Custom Metadata Type reader, backing metadataUtils.js.
+
+</details>
+
+<details>
+<summary><b>Talk to the platform</b> &middot; 4 pieces</summary>
+
+Change Data Capture, Lightning Message Service, navigation and record refresh.
+
+- [`empUtils`](force-app/main/default/lwc/empUtils) - Subscribe to Change Data Capture for an object without handling channel names and event envelopes.
+- [`lmsUtils`](force-app/main/default/lwc/lmsUtils) - Thin Lightning Message Service wrapper with a controller that cannot double-subscribe. Ships a ready channel.
+- [`navigationUtils`](force-app/main/default/lwc/navigationUtils) - NavigationMixin boilerplate wrapped in plain functions - pass the component as the first argument.
+- [`recordUtils`](force-app/main/default/lwc/recordUtils) - Pairs refreshApex with notifyRecordUpdateAvailable in one call after a DML that bypassed LDS.
+
+</details>
+
+<details>
+<summary><b>Everyday helpers</b> &middot; 7 pieces</summary>
+
+Debounce, deep clone, JSON, URLs, the clipboard, and turning Apex and LDS errors into messages.
+
+- [`functionUtils`](force-app/main/default/lwc/functionUtils) - Debounce and throttle for search-as-you-type, scroll, and resize handlers.
+- [`objectUtils`](force-app/main/default/lwc/objectUtils) - Deep clone, deep equality, and safe nested-path access for plain data.
+- [`jsonUtils`](force-app/main/default/lwc/jsonUtils) - JSON helpers that don't throw - handy for debug panels and malformed payloads.
+- [`urlUtils`](force-app/main/default/lwc/urlUtils) - Query-string parse/build/read/update helpers built on URLSearchParams/URL.
+- [`clipboardUtils`](force-app/main/default/lwc/clipboardUtils) - Copy text to the clipboard: Clipboard API first, textarea fallback second, focus restored, nothing left in the page.
+- [`apexErrorUtils`](force-app/main/default/lwc/apexErrorUtils) - Turns errors from an imperative @salesforce/apex call (or @wire to Apex) into plain messages.
+- [`ldsErrorUtils`](force-app/main/default/lwc/ldsErrorUtils) - Same idea as apexErrorUtils, for Lightning Data Service / UI API errors (different shape).
+
+</details>
+
+<!-- inside:end -->
+
+## What's new in v2.0.0
+
+- **Conflict-safe saves** so one person's edit cannot silently overwrite another's.
+- **CSV import wizard** with a column mapper, a review step, and per-row errors.
+- **Aggregate KPI cards** backed by a COUNT / SUM / AVG / MIN / MAX service with GROUP BY.
+- **Saved views** and a **column chooser** for every table.
+- **Live refresh** through Change Data Capture that never throws away an edit in progress.
+
+Details are in the [changelog](CHANGELOG.md), and the [website](https://amitshq.github.io/salesforce-lwc-production-toolkit/) shows how long each has been live and what is planned next.
+
+## How it stays safe
+
+- Object and field names cannot be bound as query parameters, so each one is checked against the running user's schema before it goes into a query. Values are always bound, never concatenated.
+- Queries and saves run in user mode, so object and field permissions apply on top of that checking.
+- A batch save reports a result for every row. One bad row never blocks the others.
+- Saved views are private to each user, and every lookup filters on the owner as well, so even an admin with View All Data cannot read someone else's.
+
+## Good to know
+
+- **Apex is verified by review and test classes, not yet by a run in an org.** The conflict check, aggregates and saved views ship with Apex tests, but nobody has run them against an org yet. Run `sf apex run test -o lwc-toolkit -c -r human` in a scratch org before relying on them.
+- Conflict detection compares then writes; it is not a lock. Two saves landing in the same instant can both pass.
+- Live refresh needs Change Data Capture enabled for the object (Setup, Integrations, Change Data Capture) and never replays what it missed.
+- Saved views need access to the `ToolkitSavedView__c` object, which the `LWCToolkitAdmin` permission set grants. Without it the view bar shows an error and the table still loads.
+- App Builder can only set simple properties. Arrays such as `columns` have to come from a wrapper component, as the demo shows.
+- Keyset paging (`GenericQueryService.queryWithCursor`) is always ordered by Id, and aggregates have no date-bucket grouping yet.
+
+## Working on it
+
+```bash
+npm install
+npm test             # Jest unit tests for every component and module
+npm run lint         # ESLint
+npm run test:site    # the website's release data and catalog, and this README's list
+npm run docs:readme  # rebuild "What's inside" after editing docs/catalog.js or docs/goals.js
+```
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests go to `dev`. Maintainers cut releases with [RELEASING.md](RELEASING.md).

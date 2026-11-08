@@ -6,7 +6,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const catalog = require('./catalog.js');
+const goals = require('./goals.js');
 const releases = require('./releases.js');
+const readmeIndex = require('../scripts/readme-index.js');
 
 const SOURCE = path.join(__dirname, '..', 'force-app', 'main', 'default');
 const CATEGORIES = ['Data components', 'UX components', 'Data utilities', 'Salesforce utilities', 'Apex services'];
@@ -82,4 +84,32 @@ test('the "what\'s new" cards link to catalog entries that exist', () => {
       assert.ok(ids.has(id), `highlight "${highlight.id}" links to unknown catalog id "${id}"`);
     });
   });
+});
+
+test('every goal has what the website and README render, and unique ids', () => {
+  const ids = goals.map((goal) => goal.id);
+  assert.equal(new Set(ids).size, ids.length, 'goal ids must be unique');
+  goals.forEach((goal) => {
+    ['id', 'label', 'blurb'].forEach((field) => assert.ok(goal[field], `goal "${goal.id}" is missing "${field}"`));
+    assert.ok(Array.isArray(goal.ids) && goal.ids.length > 0, `goal "${goal.id}" lists no pieces`);
+  });
+});
+
+test('goals only list catalog entries that exist, and none twice in one goal', () => {
+  const known = new Set(catalog.map((item) => item.id));
+  goals.forEach((goal) => {
+    assert.equal(new Set(goal.ids).size, goal.ids.length, `goal "${goal.id}" lists a piece twice`);
+    goal.ids.forEach((id) => assert.ok(known.has(id), `goal "${goal.id}" lists unknown catalog id "${id}"`));
+  });
+});
+
+test('every catalog entry belongs to at least one goal, so it can be found from the filter buttons', () => {
+  const listed = new Set(goals.flatMap((goal) => goal.ids));
+  const orphans = catalog.map((item) => item.id).filter((id) => !listed.has(id));
+  assert.deepEqual(orphans, [], `add these to a goal in docs/goals.js: ${orphans.join(', ')}`);
+});
+
+test('the README "What\'s inside" list is up to date (run: npm run docs:readme)', () => {
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+  assert.equal(readmeIndex.apply(readme), readme, 'README.md is out of date: run "npm run docs:readme" and commit it');
 });

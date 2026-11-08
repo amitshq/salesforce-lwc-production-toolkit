@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Salesforce LWC Production Toolkit</title>
-<meta name="description" content="Reusable, production-grade Lightning Web Components and Apex services: a generic server-side datatable, a modal framework, error/state handling, and the utility functions every Salesforce project rebuilds from scratch." />
+<meta name="description" content="Ready-made, tested Lightning Web Components and Apex services for what every Salesforce project rebuilds: server-side tables, CSV import, KPI cards, saved views, and the helpers around them. Try it in your browser, no org needed." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%E2%9A%A1</text></svg>" />
 <link rel="stylesheet" href="styles.css" />
 </head>
@@ -30,11 +30,10 @@
     <a class="brand" href="#top">⚡ salesforce-lwc-production-toolkit</a>
     <nav class="links">
       <a href="#whats-new">What's new</a>
-      <a href="#flagship">Flagship</a>
-      <a href="#demo">Live demo</a>
-      <a href="#components">Components</a>
-      <a href="#start">Getting started</a>
-      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Usage guide</a>
+      <a href="#demo">Try it</a>
+      <a href="#components">Pieces</a>
+      <a href="#start">Get started</a>
+      <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Docs</a>
       <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit">GitHub</a>
     </nav>
     <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme">🌙</button>
@@ -44,21 +43,21 @@
 <main>
   <section class="hero" id="top">
     <div class="wrap">
-      <div class="badges">
-        <img src="https://img.shields.io/badge/API-61.0%2B-0b5cff" alt="API version 61.0+" />
-        <img src="https://img.shields.io/badge/tests-435%20passing-2ea043" alt="435 tests passing" />
-        <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT license" />
-      </div>
       <h1>Stop rebuilding the same enterprise LWC components on every project.</h1>
       <p class="lead">
-        A generic server-side datatable, a modal framework, error/state handling, and the debounce/deep-clone/permission-check
-        utilities every Salesforce project eventually writes from scratch &mdash; built once, tested, and documented.
+        Ready-made, tested components and Apex services for what every project ends up writing: server-side tables,
+        CSV import, KPI cards, saved views, and the helpers around them.
       </p>
       <div class="cta-row">
-        <a class="btn primary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit">View on GitHub</a>
-        <a class="btn secondary" href="#demo">Try the live demo</a>
-        <a class="btn secondary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">Read the usage guide</a>
+        <a class="btn primary" href="#demo">Try it live</a>
+        <a class="btn secondary" href="#start">Get started</a>
+        <a class="btn secondary" href="https://github.com/amitshq/salesforce-lwc-production-toolkit">View on GitHub</a>
       </div>
+      <ul class="stats" aria-label="At a glance">
+        <li><strong id="statPieces">47</strong> components, services and helpers</li>
+        <li><strong>API 61.0+</strong></li>
+        <li><strong>No org needed</strong> to try it</li>
+      </ul>
     </div>
   </section>
 
@@ -74,113 +73,81 @@
     </div>
   </section>
 
-  <section id="why">
-    <div class="wrap">
-      <h2>Why this exists</h2>
-      <p class="section-lead">
-        Every Salesforce project eventually builds some variation of a server-side, sortable, filterable, editable datatable
-        with bulk actions &mdash; and re-derives the same Apex error parsing, the same modal boilerplate, the same
-        loading/empty/error branch. This is not a <code>lightning-button</code> wrapper library: everything here either does
-        something non-trivial (server-side pagination with partial-error reporting) or removes genuine, repeated boilerplate.
-      </p>
-    </div>
-  </section>
-
-  <section id="flagship">
-    <div class="wrap">
-      <h2>The flagship: <code>c-enterprise-datatable</code></h2>
-      <p class="section-lead">Point it at an object and a column array. It handles the rest of this pipeline server-side:</p>
-      <div class="pipeline">
-        <span class="step">Server-side query</span><span class="arrow">&rarr;</span>
-        <span class="step">Pagination</span><span class="arrow">&rarr;</span>
-        <span class="step">Filtering</span><span class="arrow">&rarr;</span>
-        <span class="step">Sorting</span><span class="arrow">&rarr;</span>
-        <span class="step">Inline editing</span><span class="arrow">&rarr;</span>
-        <span class="step">Bulk update</span><span class="arrow">&rarr;</span>
-        <span class="step">Partial errors</span><span class="arrow">&rarr;</span>
-        <span class="step">Refresh</span>
-      </div>
-      <pre><code>&lt;c-enterprise-datatable
-    object-api-name="Account"
-    title="Accounts"
-    columns={columns}
-    page-size="25"
-    pagination-mode="pages"
-    search-fields={searchFields}
-    bulk-actions={bulkActions}
-    enable-row-selection
-    enable-bulk-delete
-    enable-conflict-detection
-    enable-column-chooser
-    view-key="accounts-main"
-    auto-refresh
-    default-sort-field="Name"
-    onbulkaction={handleBulkAction}
-&gt;&lt;/c-enterprise-datatable&gt;</code></pre>
-      <p>
-        New in v2: <strong>conflict-safe saves</strong> (<code>enable-conflict-detection</code>), a
-        <strong>column chooser</strong>, per-user <strong>saved views</strong> (<code>view-key</code>) and
-        <strong>live refresh</strong> (<code>auto-refresh</code>), next to the CSV import wizard and aggregate KPI cards.
-      </p>
-      <p>
-        Backed by generic Apex services &mdash; <code>GenericQueryService</code>, <code>GenericDmlService</code>,
-        <code>GenericAggregateService</code>, <code>SavedViewService</code>, <code>PermissionService</code>,
-        <code>CustomMetadataService</code> &mdash; instead of a bespoke controller per object.
-        Identifiers (object/field names) are validated against the running user's schema describe; values are always bound
-        via <code>Database.queryWithBinds</code>, never concatenated. See the
-        <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md#enterprise-datatable">usage guide</a> for the full column/API reference.
-      </p>
-    </div>
-  </section>
-
   <section id="demo">
     <div class="wrap">
-      <h2>Try it: a live mock of the pipeline</h2>
+      <h2>Try it &mdash; no org needed</h2>
       <p class="section-lead">
-        Fake data, runs entirely in your browser &mdash; no org required. This mirrors what
-        <code>c-enterprise-datatable</code> + <code>GenericDmlService</code> do server-side: click a column to sort, search,
-        select rows for a bulk delete, or <strong>double-click a cell to edit</strong> (the "Globex Industries" row is wired to
-        always fail on save, so you can see the partial-error path). The tiles on top recompute as you search or delete,
-        like <code>c-aggregate-kpi-card</code> does server-side.
+        A mock of <code>c-enterprise-datatable</code> with fake data, running in your browser. Work through the list on the
+        right to see the newest features, or just click around.
       </p>
-      <div class="demo-card">
-        <div class="demo-kpis" id="demoKpis" aria-live="polite"></div>
-        <div class="demo-toolbar">
-          <input type="search" id="demoSearch" placeholder="Search name or industry..." aria-label="Search demo data" />
-          <div class="demo-toolbar-actions">
-            <button type="button" class="btn secondary small" id="demoRefresh">&#8635; Refresh</button>
+
+      <div class="playground">
+        <div class="demo-card">
+          <div class="demo-kpis" id="demoKpis" aria-live="polite"></div>
+          <div class="demo-toolbar">
+            <input type="search" id="demoSearch" placeholder="Search name or industry..." aria-label="Search demo data" />
+            <div class="demo-toolbar-actions">
+              <button type="button" class="btn secondary small" id="demoColumnsBtn" aria-expanded="false" aria-controls="demoColumnPanel">Columns</button>
+              <button type="button" class="btn secondary small" id="demoRefresh">&#8635; Refresh</button>
+            </div>
+          </div>
+          <div class="demo-panel" id="demoColumnPanel" hidden></div>
+          <div class="demo-views" id="demoViews"></div>
+          <div class="demo-notice" id="demoNotice" role="status" hidden></div>
+          <div class="demo-table-wrap">
+            <table class="demo-table" id="demoTable">
+              <thead><tr id="demoHeadRow"></tr></thead>
+              <tbody id="demoBody"></tbody>
+            </table>
+          </div>
+          <div class="demo-bulkbar" id="demoBulkBar" hidden></div>
+          <div class="demo-pagination">
+            <button type="button" class="btn secondary small" id="demoPrev">Previous</button>
+            <span id="demoPageStatus"></span>
+            <button type="button" class="btn secondary small" id="demoNext">Next</button>
           </div>
         </div>
-        <div class="demo-table-wrap">
-          <table class="demo-table" id="demoTable">
-            <thead><tr id="demoHeadRow"></tr></thead>
-            <tbody id="demoBody"></tbody>
-          </table>
-        </div>
-        <div class="demo-bulkbar" id="demoBulkBar" hidden></div>
-        <div class="demo-pagination">
-          <button type="button" class="btn secondary small" id="demoPrev">Previous</button>
-          <span id="demoPageStatus"></span>
-          <button type="button" class="btn secondary small" id="demoNext">Next</button>
-        </div>
+
+        <aside class="try-panel" aria-label="Things to try">
+          <h3>Try this <span class="try-progress" id="tryProgress">0 of 6</span></h3>
+          <ol class="try-list" id="trySteps">
+            <li data-step="explore">Search or sort the table</li>
+            <li data-step="edit">Double-click a name or industry to edit it</li>
+            <li data-step="conflict">Press <strong>Simulate</strong>, then edit the row that changed</li>
+            <li data-step="live">Turn on <strong>Live refresh</strong> and simulate again</li>
+            <li data-step="copy">Select rows, then <strong>Copy Ids</strong></li>
+            <li data-step="view">Hide a column and <strong>save it as a view</strong></li>
+          </ol>
+
+          <div class="switches">
+            <label class="switch">
+              <input type="checkbox" id="swConflict" checked />
+              <span>Conflict detection <small>refuse an edit if the record changed underneath you</small></span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="swLive" />
+              <span>Live refresh <small>update the table when a record changes elsewhere</small></span>
+            </label>
+          </div>
+
+          <div class="try-actions">
+            <button type="button" class="btn secondary small" id="demoSimulate">Simulate a colleague's change</button>
+            <button type="button" class="link-btn" id="demoReset">Reset demo</button>
+          </div>
+          <p class="try-note">The "Globex Industries" row always fails to save, to show how a failed row reports its own error.</p>
+        </aside>
       </div>
     </div>
   </section>
 
   <section id="components">
     <div class="wrap">
-      <h2>Explore every piece</h2>
-      <p class="section-lead">Search or filter, then click any card for the full usage: imports, props, events, and methods.</p>
+      <h2>Pick what you need</h2>
+      <p class="section-lead">Choose what you are trying to do, or search. Click any card for how to use it.</p>
       <div class="catalog-controls">
-        <input type="search" id="catalogSearch" placeholder="Search components, utilities, Apex services..." aria-label="Search catalog" />
-        <div class="filter-pills" id="filterPills">
-          <button type="button" class="pill active" data-filter="all">All</button>
-          <button type="button" class="pill" data-filter="Data components">Data components</button>
-          <button type="button" class="pill" data-filter="UX components">UX components</button>
-          <button type="button" class="pill" data-filter="Data utilities">Data utilities</button>
-          <button type="button" class="pill" data-filter="Salesforce utilities">Salesforce utilities</button>
-          <button type="button" class="pill" data-filter="Apex services">Apex services</button>
-        </div>
+        <input type="search" id="catalogSearch" placeholder="Search, for example: csv, modal, permission..." aria-label="Search the pieces" />
+        <div class="filter-pills" id="filterPills" role="group" aria-label="Filter by what you want to do"></div>
+        <p class="goal-blurb" id="catalogBlurb" aria-live="polite"></p>
       </div>
       <p id="catalogEmpty" class="section-lead" hidden>No matches. Try a different search term.</p>
       <div class="grid" id="catalogGrid"></div>
@@ -189,13 +156,30 @@
 
   <section id="start">
     <div class="wrap">
-      <h2>Getting started</h2>
-      <p class="section-lead">Full detail, every property, every method: see the <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">usage guide</a>. The short version:</p>
-      <pre><code>sf org create scratch -f config/project-scratch-def.json -a lwc-toolkit -d 7
+      <h2>Get started</h2>
+      <ol class="steps">
+        <li>
+          <h3>Get the code</h3>
+          <pre><code>git clone https://github.com/amitshq/salesforce-lwc-production-toolkit.git
+cd salesforce-lwc-production-toolkit</code></pre>
+        </li>
+        <li>
+          <h3>Deploy it to a scratch org</h3>
+          <pre><code>sf org create scratch -f config/project-scratch-def.json -a lwc-toolkit -d 7
 sf project deploy start -o lwc-toolkit
-sf org assign permset -o lwc-toolkit -n LWCToolkitAdmin
-sf org open -o lwc-toolkit</code></pre>
-      <p>Then drop <strong>Enterprise Datatable Demo (Accounts)</strong> onto any App/Record/Home page from Lightning App Builder.</p>
+sf org assign permset -o lwc-toolkit -n LWCToolkitAdmin</code></pre>
+        </li>
+        <li>
+          <h3>Open it</h3>
+          <pre><code>sf org open -o lwc-toolkit</code></pre>
+          <p>Add <strong>Enterprise Datatable Demo (Accounts)</strong> to an App, Record or Home page in Lightning App Builder.</p>
+        </li>
+      </ol>
+      <p class="start-note">
+        Only need one piece? Open it under <a href="#components">Pieces</a> and copy the folder shown under <em>File</em>.
+        Every property, event and method is in the
+        <a href="https://github.com/amitshq/salesforce-lwc-production-toolkit/blob/main/USAGE.md">usage guide</a>.
+      </p>
     </div>
   </section>
 </main>
@@ -224,6 +208,7 @@ sf org open -o lwc-toolkit</code></pre>
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
 
 <script src="catalog.js"></script>
+<script src="goals.js"></script>
 <script src="releases.js"></script>
 <script src="release-timer.js"></script>
 <script src="app.js"></script>
