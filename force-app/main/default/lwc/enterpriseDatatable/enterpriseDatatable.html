@@ -127,5 +127,11 @@
                 onloadmore={handleLoadMore}
             ></c-infinite-scroll-loader>
         </template>
+
+        <template if:true={showPagingCapMessage}>
+            <p class="paging-cap slds-p-horizontal_small slds-p-bottom_small slds-text-body_small slds-text-color_weak">
+                {pagingCapMessage}
+            </p>
+        </template>
     </lightning-card>
 </template>

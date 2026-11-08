@@ -12,6 +12,8 @@ import { subscribeToObjectChanges } from 'c/empUtils';
 import ConfirmDialog from 'c/confirmDialog';
 
 const DEFAULT_PAGE_SIZE = 25;
+// SOQL refuses an OFFSET above 2,000. GenericQueryService reports the last reachable page as maxPageNumber.
+const MAX_OFFSET = 2000;
 const SEARCH_DEBOUNCE_MS = 300;
 const BULK_DELETE_ACTION_NAME = '__bulkDelete';
 // A bulk change fires many events; wait for them to settle before reacting.
@@ -60,7 +62,6 @@ export default class EnterpriseDatatable extends LightningElement {
     @api title = '';
     @api keyField = 'Id';
     @api columns = [];
-    @api pageSize = DEFAULT_PAGE_SIZE;
     @api paginationMode = 'pages'; // 'pages' | 'infinite'
     @api searchFields = [];
     @api searchPlaceholder = 'Search...';
@@ -69,7 +70,6 @@ export default class EnterpriseDatatable extends LightningElement {
     @api defaultSortDirection = 'asc';
     @api enableRowSelection = false;
     @api bulkActions = [];
-    @api enableBulkDelete = false;
     @api enableConflictDetection = false;
     @api enableColumnChooser = false;
     @api viewKey;
@@ -102,6 +102,37 @@ export default class EnterpriseDatatable extends LightningElement {
     isActive = false;
     lastOwnWriteAt = 0;
     stopWatching;
+    _pageSize = DEFAULT_PAGE_SIZE;
+    _enableBulkDelete = false;
+    deleteAccessRequested = false;
+    hasRequestedData = false;
+    maxPageNumber;
+
+    @api
+    get pageSize() {
+        return this._pageSize;
+    }
+    set pageSize(value) {
+        const next = Number(value) > 0 ? Number(value) : DEFAULT_PAGE_SIZE;
+        const changed = next !== this._pageSize;
+        this._pageSize = next;
+        // A parent may only know the size after the table has loaded (the demo reads it from custom metadata).
+        if (changed && this.hasRequestedData) {
+            this.loadPage(1, { append: false });
+        }
+    }
+
+    @api
+    get enableBulkDelete() {
+        return this._enableBulkDelete;
+    }
+    set enableBulkDelete(value) {
+        this._enableBulkDelete = value;
+        // The flag may arrive after the table is on the page (the demo turns it on once a permission check returns).
+        if (value && this.isActive) {
+            this.checkDeleteAccess();
+        }
+    }
 
     _debouncedReload = debounce(() => this.loadPage(1, { append: false }), SEARCH_DEBOUNCE_MS);
     _debouncedLiveChange = debounce(() => this.reactToLiveChange(), LIVE_CHANGE_DEBOUNCE_MS);
@@ -119,18 +150,26 @@ export default class EnterpriseDatatable extends LightningElement {
         }
 
         if (this.enableBulkDelete) {
-            getObjectAccess(this.objectApiName)
-                .then((access) => {
-                    this.canDeleteObject = !!access.isDeletable;
-                })
-                .catch(() => {
-                    this.canDeleteObject = false;
-                });
+            this.checkDeleteAccess();
         }
 
         if (this.autoRefresh) {
             this.startWatching();
         }
+    }
+
+    checkDeleteAccess() {
+        if (this.deleteAccessRequested) {
+            return;
+        }
+        this.deleteAccessRequested = true;
+        getObjectAccess(this.objectApiName)
+            .then((access) => {
+                this.canDeleteObject = !!access.isDeletable;
+            })
+            .catch(() => {
+                this.canDeleteObject = false;
+            });
     }
 
     disconnectedCallback() {
@@ -194,8 +233,31 @@ export default class EnterpriseDatatable extends LightningElement {
         return this.paginationMode === 'infinite';
     }
 
-    get totalPages() {
+    /** The last page SOQL's OFFSET limit lets us request at this page size. */
+    get maxReachablePage() {
+        return this.maxPageNumber || Math.floor(MAX_OFFSET / this.pageSize) + 1;
+    }
+
+    get matchingPages() {
         return Math.max(1, Math.ceil(this.totalCount / this.pageSize));
+    }
+
+    get totalPages() {
+        return Math.min(this.matchingPages, this.maxReachablePage);
+    }
+
+    get isPagingCapped() {
+        return this.matchingPages > this.maxReachablePage;
+    }
+
+    get showPagingCapMessage() {
+        // Page mode says so up front; infinite mode once scrolling has stopped short.
+        return this.isPagingCapped && (this.isPagesMode || !this.hasMoreRecords);
+    }
+
+    get pagingCapMessage() {
+        const reachable = Math.min(this.totalCount, this.maxReachablePage * this.pageSize);
+        return `Only the first ${reachable.toLocaleString()} of ${this.totalCount.toLocaleString()} records can be paged through. Narrow the search or filters to reach the rest.`;
     }
 
     get isFirstPage() {
@@ -410,6 +472,7 @@ export default class EnterpriseDatatable extends LightningElement {
     }
 
     loadPage(pageNumber, { append }) {
+        this.hasRequestedData = true;
         this.isLoading = true;
         this.isLoadingMore = !!append;
         this.hasError = false;
@@ -431,7 +494,8 @@ export default class EnterpriseDatatable extends LightningElement {
                 this.records = append ? [...this.records, ...flattened] : flattened;
                 this.totalCount = result.totalCount;
                 this.currentPage = result.pageNumber;
-                this.hasMoreRecords = result.hasMore;
+                this.maxPageNumber = result.maxPageNumber;
+                this.hasMoreRecords = result.hasMore && result.pageNumber < this.maxReachablePage;
                 this.hasLoadedOnce = true;
             })
             .catch((error) => {

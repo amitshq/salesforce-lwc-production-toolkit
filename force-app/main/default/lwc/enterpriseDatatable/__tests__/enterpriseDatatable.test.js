@@ -927,4 +927,167 @@ describe('c-enterprise-datatable', () => {
             expect(element.shadowRoot.querySelector('lightning-datatable').data).toHaveLength(1);
         });
     });
+
+    describe('settings that arrive after the table has loaded', () => {
+        function hasDeleteAction(element) {
+            return element.shadowRoot.querySelector('c-bulk-action-bar').actions.some((a) => a.name === '__bulkDelete');
+        }
+
+        it('offers Delete when enable-bulk-delete is switched on after the first load', async () => {
+            getObjectAccess.mockResolvedValue({ isDeletable: true });
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ enableBulkDelete: false });
+            await flushPromises();
+            expect(getObjectAccess).not.toHaveBeenCalled();
+            expect(hasDeleteAction(element)).toBe(false);
+
+            element.enableBulkDelete = true;
+            await flushPromises();
+
+            expect(getObjectAccess).toHaveBeenCalledTimes(1);
+            expect(hasDeleteAction(element)).toBe(true);
+        });
+
+        it('asks for delete access only once, however often the flag is toggled', async () => {
+            getObjectAccess.mockResolvedValue({ isDeletable: true });
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ enableBulkDelete: true });
+            await flushPromises();
+
+            element.enableBulkDelete = false;
+            element.enableBulkDelete = true;
+            await flushPromises();
+
+            expect(getObjectAccess).toHaveBeenCalledTimes(1);
+            expect(hasDeleteAction(element)).toBe(true);
+        });
+
+        it('hides Delete again when the flag is switched off', async () => {
+            getObjectAccess.mockResolvedValue({ isDeletable: true });
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ enableBulkDelete: true });
+            await flushPromises();
+
+            element.enableBulkDelete = false;
+            await flushPromises();
+
+            expect(hasDeleteAction(element)).toBe(false);
+        });
+
+        it('reloads from page 1 with the new size when the page size changes after loading', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW], { pageNumber: 2, totalCount: 60 }));
+            const element = createDatatable();
+            await flushPromises();
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+
+            element.pageSize = 50;
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledTimes(2);
+            expect(queryRecords).toHaveBeenLastCalledWith(expect.objectContaining({ pageNumber: 1, pageSize: 50 }));
+        });
+
+        it('does not reload when the same page size is set again, even as a string', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            const element = createDatatable({ pageSize: 25 });
+            await flushPromises();
+
+            element.pageSize = '25';
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+        });
+
+        it('uses a page size given before it is on the page for its first and only load', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            createDatatable({ pageSize: 10 });
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledTimes(1);
+            expect(queryRecords).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 10 }));
+        });
+
+        it('falls back to the default page size for nonsense', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW]));
+            createDatatable({ pageSize: 'lots' });
+            await flushPromises();
+
+            expect(queryRecords).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 25 }));
+        });
+    });
+
+    describe('the 2,000-row paging limit', () => {
+        function nextButton(element) {
+            return Array.from(element.shadowRoot.querySelectorAll('lightning-button')).find((b) => b.label === 'Next');
+        }
+
+        function capMessage(element) {
+            const note = element.shadowRoot.querySelector('.paging-cap');
+            return note ? note.textContent.trim() : null;
+        }
+
+        it('stops Next at the last page the limit allows and says why', async () => {
+            queryRecords.mockResolvedValue(
+                queryResult([SAMPLE_ROW], { totalCount: 3400, pageNumber: 81, pageSize: 25, hasMore: false, maxPageNumber: 81 })
+            );
+            const element = createDatatable();
+            await flushPromises();
+
+            expect(nextButton(element).disabled).toBe(true);
+            expect(element.shadowRoot.textContent).toContain('Page 81 of 81');
+            expect(capMessage(element)).toBe(
+                'Only the first 2,025 of 3,400 records can be paged through. Narrow the search or filters to reach the rest.'
+            );
+        });
+
+        it('says so from the first page, so "Page 1 of 81" is not a surprise', async () => {
+            queryRecords.mockResolvedValue(
+                queryResult([SAMPLE_ROW], { totalCount: 3400, pageNumber: 1, pageSize: 25, hasMore: true, maxPageNumber: 81 })
+            );
+            const element = createDatatable();
+            await flushPromises();
+
+            expect(nextButton(element).disabled).toBe(false);
+            expect(capMessage(element)).toContain('first 2,025 of 3,400');
+        });
+
+        it('shows no limit message when every match can be reached', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW], { totalCount: 60, maxPageNumber: 81 }));
+            const element = createDatatable();
+            await flushPromises();
+
+            expect(capMessage(element)).toBeNull();
+        });
+
+        it('works the limit out itself when the result does not report it', async () => {
+            queryRecords.mockResolvedValue(queryResult([SAMPLE_ROW], { totalCount: 5000, pageNumber: 11, pageSize: 200, hasMore: true }));
+            const element = createDatatable({ pageSize: 200 });
+            await flushPromises();
+
+            // 2,000 / 200 + 1 = 11
+            expect(element.shadowRoot.textContent).toContain('Page 11 of 11');
+            expect(nextButton(element).disabled).toBe(true);
+        });
+
+        it('stops infinite scrolling at the limit and says so', async () => {
+            queryRecords.mockResolvedValue(
+                queryResult([SAMPLE_ROW], { totalCount: 3400, pageNumber: 81, pageSize: 25, hasMore: false, maxPageNumber: 81 })
+            );
+            const element = createDatatable({ paginationMode: 'infinite' });
+            await flushPromises();
+
+            expect(element.shadowRoot.querySelector('c-infinite-scroll-loader').disabled).toBe(true);
+            expect(capMessage(element)).toContain('first 2,025 of 3,400');
+        });
+
+        it('keeps quiet in infinite mode while more pages can still be loaded', async () => {
+            queryRecords.mockResolvedValue(
+                queryResult([SAMPLE_ROW], { totalCount: 3400, pageNumber: 1, pageSize: 25, hasMore: true, maxPageNumber: 81 })
+            );
+            const element = createDatatable({ paginationMode: 'infinite' });
+            await flushPromises();
+
+            expect(capMessage(element)).toBeNull();
+        });
+    });
 });

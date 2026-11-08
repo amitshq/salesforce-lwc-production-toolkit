@@ -55,13 +55,17 @@ public with sharing class GenericQueryService {
             String safeSortField = allowListSingleField(sortField, fieldMap);
             String sortDirectionUpper = String.isBlank(sortDirection) ? '' : sortDirection.toUpperCase();
             String safeSortDirection = SORT_DIRECTIONS.contains(sortDirectionUpper) ? sortDirectionUpper : 'ASC';
-            String orderByClause = String.isBlank(safeSortField)
-                ? ''
-                : ' ORDER BY ' + safeSortField + ' ' + safeSortDirection + ' NULLS LAST';
+            String orderByClause = buildOrderBy(safeSortField, safeSortDirection);
 
             Integer safePageSize = normalizePageSize(pageSize);
             Integer safePageNumber = (pageNumber == null || pageNumber < 1) ? 1 : pageNumber;
             Integer offset = (safePageNumber - 1) * safePageSize;
+            if (offset > QueryResult.MAX_OFFSET) {
+                throw new QueryServiceException(
+                    'Page ' + safePageNumber + ' is past the first ' + (QueryResult.MAX_OFFSET + safePageSize) +
+                    ' records, which is as far as page-by-page browsing can reach. Narrow the search or filters to find the rest.'
+                );
+            }
 
             String baseQuery = 'FROM ' + objectDescribe.getName() + whereClause;
             String countQuery = 'SELECT COUNT() ' + baseQuery;
@@ -81,10 +85,42 @@ public with sharing class GenericQueryService {
 
             return new QueryResult(records, totalCount, safePageNumber, safePageSize);
         } catch (QueryServiceException qse) {
-            throw new AuraHandledException(qse.getMessage());
+            throw toAuraException(qse.getMessage());
         } catch (Exception e) {
-            throw new AuraHandledException('Unable to run query: ' + e.getMessage());
+            throw toAuraException('Unable to run query: ' + e.getMessage());
         }
+    }
+
+    /**
+     * Sorts by the requested field and then by Id. Without the Id tiebreaker, rows that
+     * share a sort value come back in no fixed order, so the same row can appear on two
+     * pages and another on none. No sort field means Id order, for the same reason.
+     */
+    private static String buildOrderBy(String safeSortField, String safeSortDirection) {
+        if (String.isBlank(safeSortField)) {
+            return ' ORDER BY Id ASC';
+        }
+        if (safeSortField == 'Id') {
+            return ' ORDER BY Id ' + safeSortDirection;
+        }
+        return ' ORDER BY ' + safeSortField + ' ' + safeSortDirection + ' NULLS LAST, Id ASC';
+    }
+
+    /**
+     * The search term is bound, so quotes need no escaping (escaping them would make the
+     * search look for a literal backslash, and "O'Brien" would find nothing). LIKE's own
+     * wildcards are escaped instead, so a typed "50%" or "A_B" is matched as written.
+     */
+    @TestVisible
+    private static String escapeLikeWildcards(String value) {
+        return value.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_');
+    }
+
+    // AuraHandledException hides its message from getMessage() unless setMessage is called.
+    private static AuraHandledException toAuraException(String message) {
+        AuraHandledException ex = new AuraHandledException(message);
+        ex.setMessage(message);
+        return ex;
     }
 
     /**
@@ -146,9 +182,9 @@ public with sharing class GenericQueryService {
 
             return new CursorQueryResult(records, hasMore, nextCursor);
         } catch (QueryServiceException qse) {
-            throw new AuraHandledException(qse.getMessage());
+            throw toAuraException(qse.getMessage());
         } catch (Exception e) {
-            throw new AuraHandledException('Unable to run query: ' + e.getMessage());
+            throw toAuraException('Unable to run query: ' + e.getMessage());
         }
     }
 
@@ -167,7 +203,7 @@ public with sharing class GenericQueryService {
             return;
         }
         List<String> searchClauses = new List<String>();
-        binds.put('searchTerm', '%' + String.escapeSingleQuotes(searchTerm) + '%');
+        binds.put('searchTerm', '%' + escapeLikeWildcards(searchTerm) + '%');
         for (String searchField : safeSearchFields) {
             searchClauses.add(searchField + ' LIKE :searchTerm');
         }
