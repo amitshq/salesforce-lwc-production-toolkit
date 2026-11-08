@@ -112,6 +112,28 @@ private class GenericDmlServiceTest {
     }
 
     @IsTest
+    static void refusesToDeleteRecordsOfAnotherObject() {
+        Account account = new Account(Name = 'Delete Me');
+        insert account;
+        Contact contact = new Contact(LastName = 'Keep Me');
+        insert contact;
+
+        Test.startTest();
+        List<DmlResult> results = GenericDmlService.deleteRecords('Account', new List<String>{ contact.Id, account.Id });
+        Test.stopTest();
+
+        Map<String, DmlResult> byKey = new Map<String, DmlResult>();
+        for (DmlResult result : results) {
+            byKey.put(result.rowKey, result);
+        }
+        System.assertEquals(false, byKey.get(String.valueOf(contact.Id)).success, 'A Contact Id must not be deleted through deleteRecords(Account).');
+        System.assert(byKey.get(String.valueOf(contact.Id)).message.startsWith('Not a Account record'), byKey.get(String.valueOf(contact.Id)).message);
+        System.assertEquals(true, byKey.get(String.valueOf(account.Id)).success);
+        System.assertEquals(1, [SELECT COUNT() FROM Contact WHERE Id = :contact.Id], 'The Contact is still there.');
+        System.assertEquals(0, [SELECT COUNT() FROM Account WHERE Id = :account.Id]);
+    }
+
+    @IsTest
     static void deleteRecordsReportsInvalidIdWithoutThrowing() {
         Test.startTest();
         List<DmlResult> results = GenericDmlService.deleteRecords('Account', new List<String>{ 'not-an-id' });

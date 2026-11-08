@@ -109,7 +109,7 @@ public with sharing class GenericDmlService {
     public static List<DmlResult> deleteRecords(String objectApiName, List<String> recordIds) {
         List<DmlResult> results = new List<DmlResult>();
         try {
-            describeObjectType(objectApiName);
+            Schema.SObjectType sObjectType = describeObjectType(objectApiName);
             if (recordIds == null || recordIds.isEmpty()) {
                 return results;
             }
@@ -117,12 +117,22 @@ public with sharing class GenericDmlService {
             List<Id> ids = new List<Id>();
             List<String> validRowKeys = new List<String>();
             for (String recordId : recordIds) {
+                Id castId;
                 try {
-                    ids.add((Id) recordId);
-                    validRowKeys.add(recordId);
+                    castId = (Id) recordId;
                 } catch (Exception castError) {
                     results.add(new DmlResult(recordId, null, false, 'Invalid record Id: ' + recordId, null));
+                    continue;
                 }
+                // Delete only what the caller said it was deleting: an Id of another object is refused, not deleted.
+                if (castId.getSObjectType() != sObjectType) {
+                    results.add(
+                        new DmlResult(recordId, null, false, 'Not a ' + sObjectType.getDescribe().getLabel() + ' record: ' + recordId, null)
+                    );
+                    continue;
+                }
+                ids.add(castId);
+                validRowKeys.add(recordId);
             }
             if (ids.isEmpty()) {
                 return results;
