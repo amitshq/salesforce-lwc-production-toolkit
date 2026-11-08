@@ -112,9 +112,9 @@ Forms from a config array, record pickers, step-by-step wizards, and file upload
 - [`c-multi-select-lookup`](force-app/main/default/lwc/multiSelectLookup) - Type-to-search against any object, pick several records, remove them as pills. No bespoke Apex.
 - [`c-dynamic-filter-panel`](force-app/main/default/lwc/dynamicFilterPanel) - Builds filter conditions and emits them in exactly the QueryFilter shape GenericQueryService expects.
 - [`c-wizard`](force-app/main/default/lwc/wizard) - Multi-step flow with a progress indicator and cancelable per-step validation.
-- [`c-file-upload-manager`](force-app/main/default/lwc/fileUploadManager) - Upload, list and delete the files attached to a record, backed by FileManagerService.
+- [`c-file-upload-manager`](force-app/main/default/lwc/fileUploadManager) - Upload, list and remove the files on a record; a file still attached elsewhere is only taken off this record.
 - [`c-image-gallery`](force-app/main/default/lwc/imageGallery) - Thumbnail grid with a click-to-enlarge lightbox (Previous / Next and arrow keys).
-- [`FileManagerService.cls`](force-app/main/default/classes/FileManagerService.cls) - List and delete the files attached to a record, backing c-file-upload-manager.
+- [`FileManagerService.cls`](force-app/main/default/classes/FileManagerService.cls) - List the files on a record, and take one off it without deleting it from anywhere else it is attached.
 
 </details>
 
@@ -195,12 +195,13 @@ Details are in the [changelog](CHANGELOG.md), and the [website](https://amitshq.
 
 ## Good to know
 
-- **Apex is verified by review and test classes, not yet by a run in an org.** The conflict check, aggregates and saved views ship with Apex tests, but nobody has run them against an org yet. Run `sf apex run test -o lwc-toolkit -c -r human` in a scratch org before relying on them.
+- **Apex is verified by review and test classes, not yet by a run in an org.** Every service ships with Apex tests and the scratch-org CI is ready (see [RELEASING.md](RELEASING.md#apex-ci)), but it needs Dev Hub credentials before it can run. Until then, run `sf apex run test -o lwc-toolkit -c -r human` in a scratch org before relying on them.
 - Conflict detection compares then writes; it is not a lock. Two saves landing in the same instant can both pass.
 - Live refresh needs Change Data Capture enabled for the object (Setup, Integrations, Change Data Capture) and never replays what it missed.
 - Saved views need access to the `ToolkitSavedView__c` object, which the `LWCToolkitAdmin` permission set grants. Without it the view bar shows an error and the table still loads.
 - App Builder can only set simple properties. Arrays such as `columns` have to come from a wrapper component, as the demo shows.
-- Keyset paging (`GenericQueryService.queryWithCursor`) is always ordered by Id, and aggregates have no date-bucket grouping yet.
+- Page-by-page browsing reaches the first 2,000 records plus one page, because SOQL refuses a larger OFFSET. The table stops there and says so; narrow the search, or use keyset paging (`GenericQueryService.queryWithCursor`), which has no such limit but is always ordered by Id.
+- Aggregates have no date-bucket grouping yet.
 
 ## Working on it
 

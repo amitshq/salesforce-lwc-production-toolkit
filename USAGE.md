@@ -146,7 +146,7 @@ Columns use the standard `lightning-datatable` column shape, with two additions:
 | `title` | String | `''` | Card header title. |
 | `keyField` | String | `'Id'` | Row key field, passed to `lightning-datatable`. |
 | `columns` | Array | `[]` | Column definitions (see above). |
-| `pageSize` | Number | `25` | Rows per page/batch. |
+| `pageSize` | Number | `25` | Rows per page/batch. Changing it after the table has loaded reloads from page 1. Paging can reach only the first 2,000 records plus one page (SOQL's OFFSET limit); the table stops there and says so. |
 | `paginationMode` | String | `'pages'` | `'pages'` (Previous/Next) or `'infinite'` (scroll-triggered). |
 | `searchFields` | Array&lt;String&gt; | `[]` | Fields the global search box searches (`LIKE`, OR'd together). Omit to hide the search box. |
 | `searchPlaceholder` | String | `'Search...'` | Search input placeholder. |
@@ -155,7 +155,7 @@ Columns use the standard `lightning-datatable` column shape, with two additions:
 | `defaultSortDirection` | String | `'asc'` | Initial `sortedDirection`. |
 | `enableRowSelection` | Boolean | `false` | Shows the checkbox column and enables the bulk action bar. |
 | `bulkActions` | Array | `[]` | `[{ name, label, variant, iconName, disabled }]` — re-emitted via the `bulkaction` event. |
-| `enableBulkDelete` | Boolean | `false` | Adds a built-in "Delete" bulk action, gated on the object's `isDeletable` access and a confirmation dialog. |
+| `enableBulkDelete` | Boolean | `false` | Adds a built-in "Delete" bulk action, gated on the object's `isDeletable` access and a confirmation dialog. It can be switched on after the table has loaded (for example once a permission check returns). |
 | `enableConflictDetection` | Boolean | `false` | Rejects an inline edit if someone else changed the record after it was loaded. See [Conflict detection](#conflict-detection). |
 | `enableColumnChooser` | Boolean | `false` | Adds a header button that opens a checkbox panel for hiding and showing columns. |
 | `viewKey` | String | — | Turns on per-user saved views. Any key that is unique to this table, e.g. `'accounts-main'`. |
@@ -371,7 +371,7 @@ For very large or fast-growing tables where OFFSET pagination gets slow at high 
 
 **Methods**: `refresh()`.
 
-Backed by `FileManagerService.cls` (see [Apex services](#filemanagerservice-apex)) for listing/deleting; uploading itself is handled entirely by the base `lightning-file-upload` component.
+Each file's remove button takes the file off this record: a file that is still attached somewhere else is only unlinked, and a file whose only home was this record is deleted. The confirmation and the toast say which. Backed by `FileManagerService.cls` (see [Apex services](#filemanagerservice-apex)); uploading itself is handled entirely by the base `lightning-file-upload` component.
 
 ### Image Gallery
 
@@ -528,6 +528,8 @@ handleChange(event) {
 ### Modal
 
 `c-modal` &mdash; declarative, slot-based modal for content authored inline in a parent's template (a form, a multi-section panel). Works anywhere a component can be placed, including Experience Cloud/LWR pages.
+
+Keyboard focus moves into the dialog when it opens (the close button, else the first slotted control, else the dialog itself), stays inside while it is open - Tab and Shift+Tab wrap round through the slotted body and footer, nested components included - and returns to whatever had it when the dialog closes. Escape closes it.
 
 ```html
 <c-modal header-label="Edit Contact" onclose={handleClose}>
@@ -807,7 +809,7 @@ This only hides/shows UI &mdash; it is not the security boundary. The real enfor
 
 ### Date Range Picker
 
-`c-date-range-picker` &mdash; two date inputs plus quick-range presets (Today, Last 7 Days, Last 30 Days, This Month, Last Month), validated (start &le; end), emitting ISO date strings ready to drop into a `QueryFilter` (`>=` / `<=`) for `GenericQueryService` or `c-dynamic-filter-panel`.
+`c-date-range-picker` &mdash; two date inputs plus quick-range presets (Today, Last 7 Days, Last 30 Days, This Month, Last Month), validated (start &le; end), emitting ISO date strings ready to drop into a `QueryFilter` (`>=` / `<=`) for `GenericQueryService` or `c-dynamic-filter-panel`. Presets follow the user's Salesforce time zone (`@salesforce/i18n/timeZone`), not the browser's, so "Today" and "This Month" are right everywhere.
 
 ```html
 <c-date-range-picker label="Created Date" onchange={handleRangeChange}></c-date-range-picker>
@@ -1220,6 +1222,9 @@ public static QueryResult query(
 - Returns a `QueryResult`: `{ records, totalCount, pageNumber, pageSize, hasMore }`.
 - `filters`: list of `QueryFilter { fieldName, operatorName, value }`. Supported operators: `=`, `!=`, `<`, `<=`, `>`, `>=`, `LIKE`, `IN`, `NOT IN`.
 - Unknown/inaccessible fields are silently dropped (not an error); an unknown object throws.
+- Results are always ordered, with `Id` as the final tiebreaker (or `Id` alone with no sort field), so rows that share a sort value cannot repeat or go missing between pages.
+- SOQL refuses an OFFSET above 2,000, so a page that would start beyond it is refused with a clear message. `QueryResult` reports `maxPageNumber`, the last page that can be requested at this page size, and `hasMore` is `false` there. Use `queryWithCursor` to go further.
+- The search term is matched literally: quotes need no escaping, and a typed `%` or `_` matches that character rather than acting as a wildcard.
 - Field/object identifiers are validated against schema describes; values are bound via `Database.queryWithBinds` — never string-concatenated.
 - Relationship paths (`'Owner.Name'`) are supported and validated hop-by-hop: each relationship name (`Owner`) is resolved to its lookup field (`OwnerId`), the lookup must be readable by the running user, and the canonical path is what goes into the query.
 
@@ -1251,6 +1256,7 @@ public static List<DmlResult> deleteRecords(String objectApiName, List<String> r
 - `DmlResult`: `{ rowKey, recordId, success, message, fieldNames, isConflict, modstamp }` — one per input row, correlated by `rowKey`.
 - With `expectedModstamp`, an update whose record has a different `SystemModstamp` now fails with `isConflict: true` and a message saying someone else changed it; the other rows still save. After a successful checked update, `modstamp` is the new value, to use for the next edit. Objects without a `SystemModstamp` field skip the check. It is compare-then-write, not a lock.
 - Runs with `allOrNone=false`: one bad row never blocks the rest of the batch.
+- `deleteRecords` deletes only records of `objectApiName`: an Id of another object comes back as a failed row (`Not a <Object> record`) and is left alone.
 - FLS enforced via `Security.stripInaccessible` before every insert/update.
 
 ### GenericAggregateService
@@ -1328,8 +1334,15 @@ public static List<FileInfo> getFilesForRecord(Id recordId)
 // FileInfo => { contentDocumentId, latestVersionId, title, fileExtension, contentSize, createdDate }
 
 @AuraEnabled
+public static String removeFileFromRecord(Id contentDocumentId, Id recordId)
+// => 'unlinked' (still attached elsewhere) or 'deleted' (this record was its only home)
+
+@AuraEnabled
 public static void deleteFile(Id contentDocumentId)
+// deletes the file everywhere it is attached
 ```
+
+`removeFileFromRecord` is what `c-file-upload-manager` uses: it unlinks a file from one record and deletes it only when nothing else holds it (links to users' personal libraries do not count). Working out "anything else" has to see links to records the running user cannot see, so that one yes/no check runs without sharing; the deletes themselves run in user mode.
 
 Backs `c-file-upload-manager`. Reads/deletes `ContentDocument`/`ContentDocumentLink` under `AccessLevel.USER_MODE`/`WITH USER_MODE`; uploading itself is handled by the platform's `lightning-file-upload` base component, not this class.
 

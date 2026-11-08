@@ -200,7 +200,7 @@
       category: 'Data components',
       kind: 'LWC',
       path: 'lwc/fileUploadManager',
-      tagline: 'Upload, list and delete the files attached to a record, backed by FileManagerService.',
+      tagline: 'Upload, list and remove the files on a record; a file still attached elsewhere is only taken off this record.',
       usage: '<c-file-upload-manager record-id={recordId} accepted-formats={acceptedFormats}></c-file-upload-manager>',
       api: [
         ['recordId', 'String', '— (required)', 'The record files are attached to.'],
@@ -715,6 +715,7 @@
         ['Returns', 'QueryResult', '{ records, totalCount, pageNumber, pageSize, hasMore }'],
         ['queryWithCursor', 'CursorQueryResult', 'Keyset pagination, always Id ASC: { records, hasMore, nextCursor }. Cheap at any depth, but no total count or jump-to-page.'],
         ['Relationship paths', '—', "Owner.Name style paths are validated hop by hop, resolving relationship names (Owner) to their lookup fields (OwnerId)."],
+        ['Paging limit', 'maxPageNumber', 'SOQL refuses an OFFSET above 2,000, so pages past it are refused with a clear message; results always end with an Id tiebreaker so pages are stable.'],
         ['Security', '—', 'Identifiers validated against schema describes; values bound via Database.queryWithBinds; runs under AccessLevel.USER_MODE.']
       ]
     },
@@ -794,12 +795,13 @@
       category: 'Apex services',
       kind: 'Apex',
       path: 'classes/FileManagerService.cls',
-      tagline: 'List and delete the files attached to a record, backing c-file-upload-manager.',
+      tagline: 'List the files on a record, and take one off it without deleting it from anywhere else it is attached.',
       usage:
-        '@AuraEnabled(cacheable=true)\npublic static List<FileInfo> getFilesForRecord(Id recordId)\n\n@AuraEnabled\npublic static void deleteFile(Id contentDocumentId)',
+        '@AuraEnabled(cacheable=true)\npublic static List<FileInfo> getFilesForRecord(Id recordId)\n\n@AuraEnabled\npublic static String removeFileFromRecord(Id contentDocumentId, Id recordId)\n// \'unlinked\' or \'deleted\'\n\n@AuraEnabled\npublic static void deleteFile(Id contentDocumentId) // everywhere',
       methods: [
         ['FileInfo', '{ contentDocumentId, latestVersionId, title, fileExtension, contentSize, createdDate }', 'One per attached file.'],
-        ['Security', '—', 'Reads and deletes under AccessLevel.USER_MODE; uploading is handled by lightning-file-upload.']
+        ['removeFileFromRecord', "'unlinked' | 'deleted'", 'Unlinks a file still attached elsewhere; deletes it only when this record was its only home.'],
+        ['Security', '—', 'Reads and deletes under AccessLevel.USER_MODE. Only the "attached elsewhere" yes/no check runs without sharing, so a file is never deleted out from under records the user cannot see.']
       ]
     },
   ];

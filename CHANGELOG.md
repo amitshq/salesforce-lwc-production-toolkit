@@ -19,6 +19,16 @@ Notable changes, newest first. Dates are UTC. The website's banner and release t
 
 ### Fixed
 
+- **The demo never showed its Delete action.** `c-enterprise-datatable` read `enable-bulk-delete` only when it first loaded, and the demo turns it on once a permission check returns. The flag now works whenever it is set, and a `page-size` set after loading reloads from page 1.
+- **Date presets were a day off for users ahead of UTC.** In India, "This Month" started on the last day of the previous month, and in Los Angeles after 5pm "Today" meant tomorrow. Presets now use the user's Salesforce time zone and calendar-date arithmetic.
+- **Searching for "O'Brien" found nothing.** The search term was escaped although it is a bind variable. Typed `%` and `_` are now matched literally too.
+- **Paging could repeat or skip rows, and broke past row 2,000.** Results now end with an Id tiebreaker, and a page beyond SOQL's 2,000-row OFFSET limit is refused with a clear message; the table stops paging there and says how many records can be reached (`QueryResult.maxPageNumber`).
+- **`c-modal` trapped keyboard users on its close button.** Its focus trap never saw slotted content. Focus is now kept in with focus guards that let Tab move through the slotted body and footer, wrapping at the ends.
+- **`deleteRecords` would delete any Id it was given.** Ids of another object than the one named are now refused.
+- **Removing a file deleted it everywhere.** `c-file-upload-manager` now uses `FileManagerService.removeFileFromRecord`, which only unlinks a file that is still attached elsewhere.
+- **Fourteen JS-only modules had no `js-meta.xml`**, which Salesforce documents as required to deploy a component; `npm run test:site` now checks every bundle has one.
+- **There was no LICENSE file** although the site said MIT; added, with the `package.json` license field.
+- **The Apex CI could not run.** It now logs in with JWT (or an auth URL), runs on pushes to `dev`, manual runs and `run-apex`-labelled pull requests, keeps JUnit results and fails under 85% coverage. It still needs Dev Hub credentials to run; see RELEASING.md.
 - The website's "Get started" steps no longer make the page scroll sideways on a phone, and the phone navigation takes one row instead of a quarter of the screen.
 
 ## [2.0.0] - 2026-10-17
