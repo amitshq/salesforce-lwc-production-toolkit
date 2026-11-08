@@ -10,12 +10,25 @@ Notable changes, newest first. Dates are UTC. The website's banner and release t
 - **Clipboard helpers.** `clipboardUtils` copies text with the Clipboard API and falls back to a hidden textarea where the API is missing or refuses. The fallback restores focus (through shadow roots), always removes the textarea, never throws, can place the textarea in a caller's container (for a focus-trapped modal), and refuses empty text instead of wiping the user's clipboard. `copyValue` trims and copies an array one item per line.
 - **`c-copy-button`.** A copy button that confirms itself: a check-mark icon, a toast (de-duplicated), a screen-reader message, and `copied` / `copyerror` events. It is disabled while there is nothing to copy.
 - A **Copy Ids** bulk action in the datatable demo.
+- **Row actions and record links.** `c-enterprise-datatable` takes `row-actions` (`"view,edit,delete"` or your own `{ label, name, iconName }`): View and Edit open the record, Delete asks and can be undone, and every choice fires a cancelable `rowaction`. `linkToRecord: true` shows a column as a link to its record (or, on `Owner.Name`, the related record) and keeps it editable; `record-url-template` sets the link pattern for Experience Cloud. New `load`, `save`, `delete`, `restore` and `export` events.
+- **Mass update.** `enable-mass-update` adds an "Update field" bulk action (`c-mass-update-dialog`): one editable column, one value, every selected row. Saved 200 rows a call with conflict checks when `enable-conflict-detection` is on; failed rows stay as drafts with their errors.
+- **Export every matching row.** `enable-export` adds a button that downloads every row matching the search and filters, not just the selection, as CSV in the table's sort order, with progress and cancel (`max-export-rows`, default 50,000). Backed by the new `GenericQueryService.queryBatch`, 2,000 rows a call and never cached. `exportAll()` runs it from code.
+- **Picklist, lookup and rich-text editors.** Columns of `type: 'picklist'` (options read from the field's picklist values, or given), `'lookup'` (a record picker; the cell shows the related name) and `'richText'` edit inline with the right control, through the new `c-extended-datatable` and its cell components. Tables without them keep `lightning-datatable`.
+- **Paging past 2,000 rows.** `deep-paging` pages with an Apex pagination cursor through the new `CursorPagingService` (API 66.0, Spring '26): any page in the first 100,000 rows, in any sort order.
+- **Totals, HAVING and top-N.** `GenericAggregateService.summarize(AggregateRequest)` adds the table's search, `havingConditions` and ordering by an aggregate; with `maxGroups` that is a top-N. The table's `totals` attribute shows a totals row across every matching record, and `c-aggregate-top-list` ranks groups ("top 10 owners by pipeline") with bars.
+- **Undo delete.** After a delete from the table an Undo bar restores the records from the Recycle Bin through the new `GenericDmlService.undeleteRecords`.
+- **Check a CSV against Salesforce before importing.** `c-csv-import-wizard` takes `enable-server-check`: the review step can run `GenericDmlService.validateRecords`, which saves each chunk and rolls it back, so validation rules and automation flag rows before the import and those rows are skipped. Off by default, because automation's emails, events and callouts are not rolled back.
+- `datatableHelpers`: the pure helpers behind these (row actions, record links, sorting and chunking rows, formatting totals).
+- The demo shows all of it: a linked, editable account name, an Industry dropdown, a row menu, mass update, export, a revenue total, a top-industries list and the import check.
 
 ### Changed
 
 - **A simpler README.** It now goes from clone to running demo in a few lines, shows the one table component and the attributes that switch features on, and folds the full list of pieces into collapsible groups by goal. That list is generated from `docs/catalog.js` and `docs/goals.js` (`npm run docs:readme`), and `npm run test:site` fails if it goes stale.
 - **A simpler, more hands-on website.** A shorter page with a "Try it" playground that mocks the newest features: conflict detection (with a button that plays a colleague changing a record), live refresh, a column chooser, saved views that survive a reload, and Copy Ids, plus a checklist that ticks off as you try each one. Pieces are found by what you want to do, not by code category. Usage snippets in the catalog copy with one click.
 - The test-count badge and counts are gone from the README and website, since they went stale with every change.
+- `GenericQueryService.query` and `GenericAggregateService.aggregate` now build on shared, public pieces (`GenericQueryService.plan`, `appendSearchClause`, `normalizePageSize`, and `summarize`), so the cursor pager, the export and the totals row validate requests the same way. Their behaviour is unchanged.
+- The bulk-delete confirmation no longer says deleting "cannot be undone"; it can. Rows that fail to delete stay selected.
+- Unit tests may now drive wire adapters (`.emit()`): ESLint's wire-adapter rule is off for `__tests__` folders.
 
 ### Fixed
 
@@ -28,7 +41,14 @@ Notable changes, newest first. Dates are UTC. The website's banner and release t
 - **Removing a file deleted it everywhere.** `c-file-upload-manager` now uses `FileManagerService.removeFileFromRecord`, which only unlinks a file that is still attached elsewhere.
 - **Fourteen JS-only modules had no `js-meta.xml`**, which Salesforce documents as required to deploy a component; `npm run test:site` now checks every bundle has one.
 - **There was no LICENSE file** although the site said MIT; added, with the `package.json` license field.
+- **The datatable handed `lightning-datatable` its selection as row objects.** `selected-rows` takes key-field values, so a re-render could drop the user's selection. It now passes the keys.
+- **Record counts were formatted in the browser's locale**, not the user's Salesforce locale (an Indian browser showed 1,00,000 for an American user's org). The table now uses `@salesforce/i18n/locale`.
 - **The Apex CI could not run.** It now logs in with JWT (or an auth URL), runs on pushes to `dev`, manual runs and `run-apex`-labelled pull requests, keeps JUnit results and fails under 85% coverage. It still needs Dev Hub credentials to run; see RELEASING.md.
+
+### Not yet verified in an org
+
+- The new Apex (`CursorPagingService`, `queryBatch`, `undeleteRecords`, `validateRecords`, `summarize` with HAVING and ordering) ships with test classes but has not been run in an org. The pagination-cursor calls follow Salesforce's Apex reference for Spring '26; run the scratch-org CI or `sf apex run test` before relying on them.
+- The custom datatable cell types follow Salesforce's documented custom-type pattern (`editTemplate` with `data-inputable`); the Jest tests cover the components behind them, not the platform's inline-edit panel.
 - The website's "Get started" steps no longer make the page scroll sideways on a phone, and the phone navigation takes one row instead of a quarter of the screen.
 
 ## [2.0.0] - 2026-10-17

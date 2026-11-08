@@ -9,6 +9,13 @@ For the "why," see [README.md](README.md). This document only covers "how."
 - [Requirements](#requirements)
 - [Deploying this repo](#deploying-this-repo)
 - [Enterprise Datatable](#enterprise-datatable)
+  - [Row actions and record links](#row-actions-and-record-links)
+  - [Picklist, lookup and rich-text columns](#picklist-lookup-and-rich-text-columns)
+  - [Mass update](#mass-update)
+  - [Export every matching row](#export-every-matching-row)
+  - [Totals row](#totals-row)
+  - [Paging past 2,000 rows](#paging-past-2000-rows)
+  - [Undo delete](#undo-delete)
   - [Conflict detection](#conflict-detection)
   - [Column chooser and saved views](#column-chooser-and-saved-views)
   - [Live refresh](#live-refresh)
@@ -21,6 +28,9 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [Image Gallery](#image-gallery)
   - [CSV Import Wizard](#csv-import-wizard)
   - [Aggregate KPI Card](#aggregate-kpi-card)
+  - [Aggregate Top List](#aggregate-top-list)
+  - [Extended Datatable](#extended-datatable)
+  - [Mass Update Dialog](#mass-update-dialog)
   - [Datatable View Bar](#datatable-view-bar)
   - [Column Chooser](#column-chooser)
 - [UX components](#ux-components)
@@ -43,6 +53,7 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [jsonUtils](#jsonutils)
   - [csvUtils](#csvutils)
   - [csvImportEngine](#csvimportengine)
+  - [datatableHelpers](#datatablehelpers)
   - [clipboardUtils](#clipboardutils)
   - [urlUtils](#urlutils)
 - [Salesforce utility modules](#salesforce-utility-modules)
@@ -57,6 +68,7 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [empUtils](#emputils)
 - [Apex services](#apex-services)
   - [GenericQueryService](#genericqueryservice)
+  - [CursorPagingService](#cursorpagingservice)
   - [GenericDmlService](#genericdmlservice)
   - [GenericAggregateService](#genericaggregateservice)
   - [SavedViewService](#savedviewservice)
@@ -70,7 +82,7 @@ For the "why," see [README.md](README.md). This document only covers "how."
 ## Requirements
 
 - Salesforce CLI (`sf`), authenticated to a Dev Hub, sandbox, or scratch org
-- API 61.0+ org (Summer '24+)
+- API 61.0+ org (Summer '24+). `CursorPagingService`, behind the datatable's `deep-paging`, is saved at API 66.0 and needs Spring '26 or later.
 - Node.js 18+ (only needed to run Jest/ESLint locally, not to deploy)
 
 ## Deploying this repo
@@ -92,7 +104,7 @@ For the "why," see [README.md](README.md). This document only covers "how."
    sf org open -o lwc-toolkit
    ```
 
-To use any single component/utility in your own project instead of the whole repo, copy that component's folder from `force-app/main/default/lwc/` (and, for `enterpriseDatatable`, the Apex classes under [Apex services](#apex-services) it calls - `GenericQueryService`, `GenericDmlService` and `PermissionService` with their `QueryResult`, `QueryFilter`, `DmlRecordInput`, `DmlResult` and `FieldAccess` types - plus their `*.cls-meta.xml` files) into your own `force-app`. Saved views additionally need `SavedViewService`, `SavedViewInfo` and the `ToolkitSavedView__c` object; the other components list what they call in their own sections.
+To use any single component/utility in your own project instead of the whole repo, copy that component's folder from `force-app/main/default/lwc/` (and, for `enterpriseDatatable`, the Apex classes under [Apex services](#apex-services) it calls - `GenericQueryService`, `GenericDmlService` and `PermissionService` with their `QueryResult`, `QueryFilter`, `DmlRecordInput`, `DmlResult` and `FieldAccess` types - plus their `*.cls-meta.xml` files) into your own `force-app`. Saved views additionally need `SavedViewService`, `SavedViewInfo` and the `ToolkitSavedView__c` object; `totals` needs `GenericAggregateService` with `AggregateRequest`, `AggregateSpec`, `AggregateCondition` and `AggregateRow`; `deep-paging` needs `CursorPagingService`. The table also uses `c-extended-datatable` (with `c-datatable-lookup-cell`, `c-datatable-lookup-editor` and `c-datatable-rich-text-editor`), `c-mass-update-dialog` and `datatableHelpers`. The other components list what they call in their own sections.
 
 Two features need setup in the org beyond deploying: **live refresh** needs Change Data Capture enabled for the object (Setup, Integrations, Change Data Capture), and **saved views** need users to have access to `ToolkitSavedView__c` (the `LWCToolkitAdmin` permission set grants it).
 
@@ -100,7 +112,7 @@ Two features need setup in the org beyond deploying: **live refresh** needs Chan
 
 ## Enterprise Datatable
 
-`c-enterprise-datatable` &mdash; the flagship component. Generic, server-side datatable: paging, sorting, filtering, search, inline edit with bulk save, optional bulk delete, and partial-error reporting, for any object.
+`c-enterprise-datatable` &mdash; the flagship component. Generic, server-side datatable: paging (past 2,000 rows if you want), sorting, filtering, search, inline edit with picklist, lookup and rich-text editors, row actions, mass update, export of every matching row, a totals row, bulk delete with undo, and partial-error reporting, for any object.
 
 ### Basic usage
 
@@ -136,7 +148,7 @@ handleBulkAction(event) {
 }
 ```
 
-Columns use the standard `lightning-datatable` column shape, with two additions: `filterable` and `filterOperator`.
+Columns use the standard `lightning-datatable` column shape, with these additions: `filterable` and `filterOperator` (see [Filtering](#filtering)), `linkToRecord` (see [Row actions and record links](#row-actions-and-record-links)), and the editable types `picklist`, `lookup` and `richText` with `options` and `displayField` (see [Picklist, lookup and rich-text columns](#picklist-lookup-and-rich-text-columns)).
 
 ### `@api` properties
 
@@ -161,12 +173,26 @@ Columns use the standard `lightning-datatable` column shape, with two additions:
 | `viewKey` | String | — | Turns on per-user saved views. Any key that is unique to this table, e.g. `'accounts-main'`. |
 | `autoRefresh` | Boolean | `false` | Follows changes to the object made elsewhere. See [Live refresh](#live-refresh). |
 | `hideRefreshButton` | Boolean | `false` | Hides the header refresh button. |
+| `rowActions` | String or Array | — | A menu on each row: `'view,edit,delete'`, or `[{ label, name, iconName }]`. See [Row actions and record links](#row-actions-and-record-links). |
+| `recordUrlTemplate` | String | `'/lightning/r/{recordId}/view'` | The link pattern for `linkToRecord` and lookup cells. In an Experience Cloud site use its own record page, e.g. `'/s/detail/{recordId}'`. |
+| `enableMassUpdate` | Boolean | `false` | Adds an "Update field" bulk action. See [Mass update](#mass-update). |
+| `enableExport` | Boolean | `false` | Adds an export button. See [Export every matching row](#export-every-matching-row). |
+| `maxExportRows` | Number | `50000` | The most rows one export reads. |
+| `exportFileName` | String | `'<Object>-export.csv'` | The downloaded file's name. |
+| `totals` | Array | `[]` | `[{ fieldName, functionName, label, currencyCode }]`. See [Totals row](#totals-row). |
+| `deepPaging` | Boolean | `false` | Pages with an Apex pagination cursor instead of OFFSET. See [Paging past 2,000 rows](#paging-past-2000-rows). |
 
 ### Events
 
 | Event | `detail` | When |
 |---|---|---|
-| `bulkaction` | `{ name, selectedRows }` | A `bulkActions` entry (not the built-in delete) was clicked. |
+| `bulkaction` | `{ name, selectedRows }` | A `bulkActions` entry (not a built-in one) was clicked. |
+| `rowaction` | `{ name, action, row }` | Any row action was chosen, built-in ones included. Cancelable: `event.preventDefault()` stops the built-in View, Edit or Delete. |
+| `load` | `{ records, totalCount, pageNumber, pageSize }` | A page arrived. `records` is that page, flattened as the table shows it. |
+| `save` | `{ source, savedIds, failedRows }` | An inline save (`source: 'inline'`) or a mass update (`'massUpdate'`) finished. `failedRows` is `[{ rowKey, message, isConflict }]`. |
+| `delete` | `{ recordIds }` | Records were deleted from the table (bulk Delete or the row action). |
+| `restore` | `{ recordIds }` | **Undo** brought deleted records back. |
+| `export` | `{ rowCount, truncated }` | An export was downloaded. `truncated` means `maxExportRows` cut it short. |
 | `liveerror` | `{ message }` | `auto-refresh` could not subscribe (for example Change Data Capture is off for the object). The table keeps working without live updates. |
 
 ### Methods
@@ -174,6 +200,7 @@ Columns use the standard `lightning-datatable` column shape, with two additions:
 | Method | Returns | Description |
 |---|---|---|
 | `refresh()` | `Promise<void>` | Re-runs the current query. Infinite mode resets to page 1; page mode re-fetches the current page. Clears selection and any in-progress edits. |
+| `exportAll()` | `Promise<Object>` | Runs the export, as the export button does. Resolves with `{ rowCount, truncated }`, `{ cancelled: true }` or `{ error }`. |
 | `applyConfig(config)` | `Promise<void>` | Applies a layout (see `currentConfig`) and re-queries from page 1. Columns, sort fields and filters the table does not have are ignored; `null` resets to the defaults. |
 | `currentConfig` | `Object` (getter) | The table's layout as a plain, JSON-safe object: `{ v, columns, sortedBy, sortedDirection, searchTerm, columnFilters }`. `columns` is `null` when every column is shown. |
 
@@ -191,7 +218,105 @@ Set `editable: true` on a column to enable inline editing (native `lightning-dat
 
 ### Bulk delete
 
-Set `enable-bulk-delete`. The delete action only appears if `PermissionService.checkObjectAccess` reports the object as deletable for the running user. Clicking it opens `c-confirm-dialog`; on confirmation, selected rows are sent to `GenericDmlService.deleteRecords`, which also reports partial failures.
+Set `enable-bulk-delete`. The delete action only appears if `PermissionService.checkObjectAccess` reports the object as deletable for the running user. Clicking it opens `c-confirm-dialog`; on confirmation, selected rows are sent to `GenericDmlService.deleteRecords`, which also reports partial failures. Rows that could not be deleted stay selected. Deleted records can be brought back with [Undo](#undo-delete).
+
+### Row actions and record links
+
+`row-actions` adds a menu to the end of each row.
+
+```html
+<c-enterprise-datatable object-api-name="Account" columns={columns} row-actions="view,edit,delete" onrowaction={handleRowAction}></c-enterprise-datatable>
+```
+
+```js
+// or, with your own actions alongside the built-in ones:
+rowActions = ['view', { label: 'Log a call', name: 'logCall', iconName: 'utility:call' }, 'delete'];
+
+handleRowAction(event) {
+    const { name, row } = event.detail;
+    if (name === 'logCall') {
+        this.openCallDialog(row.Id);
+    }
+}
+```
+
+- **view** opens the record and **edit** opens its standard edit page, through `NavigationMixin`. **delete** asks for confirmation, deletes that one record, and offers [Undo](#undo-delete).
+- Edit and Delete only appear for users who can edit or delete the object (the same `getObjectAccess` check as bulk delete).
+- Every choice fires `rowaction` first, built-in ones included. Call `event.preventDefault()` in your handler to do something else instead of the built-in View, Edit or Delete.
+- The string form works in Lightning App Builder too (the **Row Actions** property).
+
+`linkToRecord: true` on a column shows its value as a link to the row's record. On a relationship path such as `Owner.Name` it links to the related record instead (the table also queries `Owner.Id`). The column stays inline-editable, sortable and exportable as plain text. Links follow `record-url-template`, `'/lightning/r/{recordId}/view'` by default.
+
+### Picklist, lookup and rich-text columns
+
+Three column types edit inline with the right control, instead of a text box:
+
+```js
+columns = [
+    // A dropdown of the field's picklist values, read for the user's default record type.
+    { label: 'Industry', fieldName: 'Industry', type: 'picklist', editable: true },
+    // Or your own options.
+    { label: 'Rating', fieldName: 'Rating', type: 'picklist', editable: true, options: [{ label: 'Hot', value: 'Hot' }, { label: 'Cold', value: 'Cold' }] },
+    // A record picker. displayField is the name to show; it is queried with the row.
+    { label: 'Parent', fieldName: 'ParentId', type: 'lookup', editable: true, displayField: 'Parent.Name', typeAttributes: { objectApiName: 'Account' } },
+    // Formatted text, edited with a rich-text editor.
+    { label: 'Notes', fieldName: 'Notes__c', type: 'richText', editable: true }
+];
+```
+
+- **picklist**: options come from `getPicklistValuesByRecordType` for the object's default record type, unless the column gives `options`. A `--None--` choice clears the field, unless the column says `required: true`. Values are shown as stored (the API name), as in a text column.
+- **lookup**: the cell shows the related record's name, linked. After the user picks another record, or after a save, the new name is read through Lightning Data Service; until it arrives the Id is shown. For objects whose name field is not `Name`, give `typeAttributes.nameField` (e.g. `CaseNumber`).
+- **richText**: shown formatted (sanitized by `lightning-formatted-rich-text`), wrapped, and exported as plain text.
+- These types, and `linkToRecord`, are rendered by [`c-extended-datatable`](#extended-datatable). Tables that use none of them keep plain `lightning-datatable`.
+
+### Mass update
+
+`enable-mass-update` adds an **Update field** bulk action. It opens [`c-mass-update-dialog`](#mass-update-dialog), which offers the table's editable columns on the object itself (not relationship columns) and the right input for each. The value is then saved on every selected row:
+
+- Saved 200 rows per `GenericDmlService.saveRecords` call, one call after another, with progress shown for large selections.
+- With `enable-conflict-detection`, each row is checked against the `SystemModstamp` it was loaded with, so a mass update never overwrites a change made since.
+- Rows that fail stay as drafts with their error, ready to fix and save again; the toast counts what saved and what did not. A call the server refuses outright fails only its own 200 rows.
+- An empty value clears the field, and the dialog's button says so ("Clear on 12 records").
+- It is only offered to users who can edit the object, and it refuses to run over unsaved inline edits.
+
+### Export every matching row
+
+`enable-export` adds a download button to the card header. It exports every row that matches the current search and filters (not just the selected ones) as CSV:
+
+- The visible columns, in the table's current sort order. Relationship columns come out flattened, rich text as plain text, and text that would run as a spreadsheet formula is neutralized (see [`csvUtils`](#csvutils)).
+- Rows are read 2,000 at a time with [`GenericQueryService.queryBatch`](#genericqueryservice), with progress and a **Cancel export** button. A cancelled export downloads nothing.
+- One export reads at most `max-export-rows` (50,000) rows; the toast says when it stopped short.
+- Sorting happens in the browser after reading, in the same order as the server's (empty values last, text without regard to case).
+
+`exportAll()` runs the same export from your own code. The demo's "Export CSV" bulk action is different: it exports only the selected rows.
+
+### Totals row
+
+`totals` adds a row under the table with totals across every matching record, not just the page:
+
+```js
+totals = [
+    { fieldName: 'AnnualRevenue', functionName: 'SUM' },
+    { fieldName: 'NumberOfEmployees', functionName: 'AVG', label: 'Average size' }
+];
+```
+
+- Computed server-side by [`GenericAggregateService.summarize`](#genericaggregateservice) with the table's own search and filters. `functionName` is `SUM` (default), `AVG`, `MIN`, `MAX` or `COUNT`.
+- Formatted like the column: a currency column's total is shown as currency.
+- Recalculated when the search or filters change and after a save, mass update, delete or undo; not on every page change.
+- If it cannot be calculated (for example a `SUM` of a text field), the message replaces the row and the table keeps working.
+
+### Paging past 2,000 rows
+
+SOQL refuses an OFFSET above 2,000, so page-by-page browsing normally stops at row 2,000 plus a page (the table says so). `deep-paging` switches the table to [`CursorPagingService`](#cursorpagingservice), which pages with an Apex pagination cursor instead:
+
+- Any page in the first 100,000 matching rows, in any sort order, with jump-to-page as before. Past 100,000 the table stops and says so, the same way.
+- Nothing else changes: same columns, filters, search and `QueryResult`.
+- It needs Spring '26 (API 66.0) or later, and each page opens one cursor: an org can open 200,000 pagination cursors a day, which a busy table on a big team can use up.
+
+### Undo delete
+
+After a delete from the table (bulk Delete or the row action), a bar says how many records were deleted and offers **Undo**. Undo restores them from the Recycle Bin with `GenericDmlService.undeleteRecords`, reloads the page, refreshes the totals and fires `restore`. The bar stays until it is dismissed or the next delete replaces it, so there is no time limit to beat. Records emptied from the Recycle Bin cannot come back; they are reported in a toast.
 
 ### Conflict detection
 
@@ -423,6 +548,7 @@ handleImportComplete(event) {
 | `fields` | Array | `[]` | `[{ apiName, label, type, required }]` &mdash; the fields a column may be mapped to (same shape as `c-dynamic-form`). `type` is one of `text`, `number`/`currency`/`percent`/`integer`/`double`, `checkbox`/`boolean`, `date`, `datetime`, `email`. |
 | `chunkSize` | Number | `200` | Rows per `saveRecords` call. Each chunk is its own transaction, so a large import is not all-or-nothing. |
 | `maxRows` | Number | `5000` | A file with more data rows is refused with a message. Files over 5 MB are refused too. |
+| `enableServerCheck` | Boolean | `false` | Adds **Check against Salesforce** to the review step. See below. |
 
 **Events**: `importcomplete` (`{ successCount, failureCount, validationFailureCount, notAttemptedCount, emptyRowCount }`) &mdash; the import finished, or was cancelled between chunks (`notAttemptedCount` is what was left).
 
@@ -436,6 +562,12 @@ The four steps:
 4. **Import.** Chunks go to the server one after another, with progress and a **Cancel** that stops after the chunk in flight. Afterwards a report of server-side failures can be downloaded.
 
 Rules worth knowing: a row with an `Id` updates that record and a row without one creates a new record; empty cells are never sent, so an update cannot blank a field by accident; fully blank rows are ignored; required fields are only enforced on rows without an `Id`; row numbers count the header as row 1, so they match what a spreadsheet shows.
+
+**Checking against Salesforce.** The review step only knows what the file says. With `enable-server-check`, a **Check against Salesforce** button sends the rows to `GenericDmlService.validateRecords` in chunks: each chunk is saved and then rolled back, so validation rules, required fields, duplicate rules, triggers and flows all run and nothing is kept. Rows Salesforce would reject join the problem list with its message and are skipped by the import.
+
+- It is off by default. Only database work is rolled back: if the object's automation sends emails, publishes platform events immediately or queues callouts, those can still happen during a check. Turn it on only for objects whose automation does not.
+- A row that passes can still fail at import if the data changes in between, and chunks are checked separately, so two rows in different chunks that clash with each other (a duplicate, say) both pass.
+- If a chunk cannot be checked (a governor limit, for instance) the check stops, keeps what it learned, and offers **Check again**.
 
 ### Aggregate KPI Card
 
@@ -470,6 +602,76 @@ openFilters = [{ fieldName: 'IsClosed', operatorName: '=', value: false }];
 **Methods**: `refresh()`.
 
 It queries when it appears and again whenever one of its settings changes (a parent passing an equal copy of the same filters does not count), and it ignores a slow response that arrives after a newer one. A failed query shows the server's message in place of the card. The only Apex it needs is `GenericAggregateService`, and the users need access to that class.
+
+### Aggregate Top List
+
+`c-aggregate-top-list` &mdash; a ranked "top N" list. It groups an object by a field, aggregates each group and lists the highest first, each with a bar scaled to the leader. It runs [`GenericAggregateService.summarize`](#genericaggregateservice), ordering by the aggregate and capping the number of groups, so object and field security apply.
+
+```html
+<c-aggregate-top-list
+    label="Top owners by open pipeline"
+    object-api-name="Opportunity"
+    group-by-field="Owner.Name"
+    function-name="SUM"
+    field-name="Amount"
+    filters={openFilters}
+    having-conditions={bigOwnersOnly}
+    max-items="10"
+    format="currency"
+></c-aggregate-top-list>
+```
+
+```js
+openFilters = [{ fieldName: 'IsClosed', operatorName: '=', value: false }];
+bigOwnersOnly = [{ alias: 'value', operatorName: '>', value: 100000 }];
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `objectApiName` | String | — (required) | The sObject to rank. |
+| `groupByField` | String | — (required) | The field to group by; relationship paths such as `Owner.Name` work. |
+| `functionName` | String | `'COUNT'` | `COUNT`, `SUM`, `AVG`, `MIN` or `MAX`. |
+| `fieldName` | String | — | The field to aggregate. Leave blank for `COUNT`. |
+| `maxItems` | Number | `10` | How many groups to show (the server caps it at 200). |
+| `orderDirection` | String | `'DESC'` | `'DESC'` ranks the highest first, `'ASC'` the lowest. |
+| `filters` | Array | `[]` | `QueryFilter[]`, applied before grouping. |
+| `havingConditions` | Array | `[]` | Keeps only groups whose value passes. The aggregate's alias is `'value'`. |
+| `format`, `currencyCode` | String | `'number'` | `'number'`, `'currency'` or `'percent'`, in the user's locale. |
+| `label`, `iconName`, `emptyMessage` | String | | The card title and icon, and what to say when nothing matches. |
+
+**Methods**: `refresh()`. Like the KPI card, it re-queries once for any number of setting changes and ignores a slow answer that a newer query has overtaken. A group with no value is listed as "(blank)".
+
+### Extended Datatable
+
+`c-extended-datatable` &mdash; `lightning-datatable` with four more column types, each editable inline: `picklist` (a dropdown), `lookup` (a record picker; the cell shows the related name, linked), `richText` (a rich-text editor) and `recordLink` (a link, edited as text). [`c-enterprise-datatable`](#picklist-lookup-and-rich-text-columns) builds the type attributes from its column config, so most pages never use this directly. To use it on its own:
+
+```html
+<c-extended-datatable key-field="Id" data={rows} columns={columns} draft-values={drafts} onsave={handleSave}></c-extended-datatable>
+```
+
+| Type | `typeAttributes` |
+|---|---|
+| `picklist` | `{ options: [{ label, value }], placeholder, label }` |
+| `lookup` | `{ objectApiName, displayValue, originalValue, nameField, urlTemplate, label }`. `displayValue` and `originalValue` are usually `{ fieldName }` references: the loaded name, and the loaded Id it belongs to. |
+| `richText` | `{ label }` |
+| `recordLink` | `{ url, target, label }` |
+
+The editors are `c-datatable-lookup-editor` and `c-datatable-rich-text-editor`, small wrappers that give the record picker and rich-text editor the `value`, `validity`, `showHelpMessageIfInvalid()` and `focus()` the inline-edit panel expects, and `c-datatable-lookup-cell` shows a lookup's name.
+
+### Mass Update Dialog
+
+`c-mass-update-dialog` &mdash; the dialog behind the datatable's mass update, built on `lightning/modal`. It asks which field to set and to what, with the right input for each field type.
+
+```js
+import MassUpdateDialog from 'c/massUpdateDialog';
+
+const choice = await MassUpdateDialog.open({ size: 'small', recordCount: rows.length, fields });
+if (choice) {
+    // { fieldName, value } - value is null when the field is to be cleared
+}
+```
+
+`fields` is `[{ fieldName, label, type, options, objectApiName }]`. `type` picks the input: `picklist` (needs `options`), `lookup` (needs `objectApiName`), `boolean`/`checkbox`, `richText`, `number`/`currency`/`percent`, `date`, `datetime`, `email`, `phone`, `url`, or text. Numbers come back as numbers. An empty value means "clear the field", and the dialog says so in its summary and on the button.
 
 ### Datatable View Bar
 
@@ -934,6 +1136,24 @@ The UI-free logic behind `c-csv-import-wizard`, for importing without its screen
 
 `ID_FIELD` (`'Id'`) is exported for the mapping value that means "update this record".
 
+### datatableHelpers
+
+The pure helpers behind `c-enterprise-datatable`, `c-aggregate-top-list` and the lookup cell.
+
+```js
+import { normalizeRowActions, recordUrl, sortRows, toChunks, richTextToPlainText, formatNumber } from 'c/datatableHelpers';
+```
+
+| Function | Description |
+|---|---|
+| `normalizeRowActions(value)` | A comma-separated string or an array of names and `{ label, name, iconName }` objects, as `lightning-datatable` `rowActions`. `view`, `edit` and `delete` get default labels; duplicates and blanks are dropped. |
+| `recordUrl(template, recordId)` | Fills every `{recordId}` in the template (URL-encoded). `undefined` without an Id. |
+| `relatedIdPath(path)` | `'Owner.Name'` to `'Owner.Id'`. |
+| `compareRows(a, b, fieldName, direction)` / `sortRows(rows, fieldName, direction)` | Sorts like `GenericQueryService`: empty values last in both directions, text without regard to case or accents. `sortRows` returns a sorted copy and keeps ties in their original order. |
+| `toChunks(items, size)` | Consecutive chunks of at most `size`. |
+| `richTextToPlainText(html)` | Plain text with line breaks, for a CSV cell. |
+| `formatNumber(value, format, currencyCode)` | `'number'`, `'currency'` or `'percent'` (already in percent, as Salesforce stores it) in the user's locale and currency; `'—'` for no value. |
+
 ### clipboardUtils
 
 Copy text to the clipboard from your own code. It uses the asynchronous Clipboard API where the browser allows it, and falls back to a temporary `<textarea>` with `document.execCommand('copy')` where it does not: an insecure origin, an iframe whose policy blocks the API, an older browser, or a write the browser rejects. For a ready-made button, use [`c-copy-button`](#copy-button).
@@ -1242,6 +1462,38 @@ public static CursorQueryResult queryWithCursor(
 - Always sorted by `Id ASC` (the trade-off that makes it cheap at any depth); pass the previous page's `nextCursor` as `afterId` to get the next page. `nextCursor` is `null` when `hasMore` is `false`.
 - Same filter/search/security semantics as `query()`.
 
+**Reading every matching row**, as the datatable's export does:
+
+```apex
+@AuraEnabled
+public static CursorQueryResult queryBatch(
+    String objectApiName, List<String> fields, List<QueryFilter> filters,
+    String searchTerm, List<String> searchFields, String afterId, Integer batchSize
+)
+```
+
+The same keyset walk as `queryWithCursor`, with up to 2,000 rows a call (a larger `batchSize` is clamped, not refused). It is not cacheable, so an export straight after an edit is never served the browser's cached copy.
+
+`GenericQueryService.plan(...)` builds the validated query (fields, WHERE, ORDER BY and binds) without running it; `CursorPagingService` pages the same plan.
+
+### CursorPagingService
+
+```apex
+@AuraEnabled
+public static QueryResult queryPage(
+    String objectApiName, List<String> fields, List<QueryFilter> filters,
+    String sortField, String sortDirection, String searchTerm, List<String> searchFields,
+    Integer pageNumber, Integer pageSize
+)
+```
+
+- The same arguments and `QueryResult` as `GenericQueryService.query`, but it pages with an Apex pagination cursor (`Database.getPaginationCursorWithBinds`, then `fetchPage`) instead of OFFSET, so it reaches any page in the first 100,000 matching rows, in any sort order. `maxPageNumber` is the last page that starts inside them; a page beyond is refused with a clear message.
+- Validation is `GenericQueryService.plan`: the same describe allow-list and bound values. The count and the cursor run in user mode.
+- A cursor is not kept between calls, so each page reflects the data as it is now. Each call opens one cursor, and an org can open 200,000 pagination cursors a day.
+- Saved at API 66.0 (Spring '26), the only class in the toolkit that needs it. Not cacheable.
+
+> Not yet run in an org: the pagination-cursor calls follow Salesforce's Apex reference, but, like the rest of the Apex, they are checked by review and test classes until the scratch-org CI runs.
+
 ### GenericDmlService
 
 ```apex
@@ -1249,7 +1501,13 @@ public static CursorQueryResult queryWithCursor(
 public static List<DmlResult> saveRecords(String objectApiName, List<DmlRecordInput> records)
 
 @AuraEnabled
+public static List<DmlResult> validateRecords(String objectApiName, List<DmlRecordInput> records)
+
+@AuraEnabled
 public static List<DmlResult> deleteRecords(String objectApiName, List<String> recordIds)
+
+@AuraEnabled
+public static List<DmlResult> undeleteRecords(String objectApiName, List<String> recordIds)
 ```
 
 - `DmlRecordInput`: `{ rowKey, fields, expectedModstamp }` — `fields` is a map of field API name to value; include `Id` to update, omit it to insert. `expectedModstamp` is optional: the `SystemModstamp` you loaded, as epoch milliseconds.
@@ -1257,6 +1515,8 @@ public static List<DmlResult> deleteRecords(String objectApiName, List<String> r
 - With `expectedModstamp`, an update whose record has a different `SystemModstamp` now fails with `isConflict: true` and a message saying someone else changed it; the other rows still save. After a successful checked update, `modstamp` is the new value, to use for the next edit. Objects without a `SystemModstamp` field skip the check. It is compare-then-write, not a lock.
 - Runs with `allOrNone=false`: one bad row never blocks the rest of the batch.
 - `deleteRecords` deletes only records of `objectApiName`: an Id of another object comes back as a failed row (`Not a <Object> record`) and is left alone.
+- `undeleteRecords` restores records from the Recycle Bin, with the same per-Id results and the same refusal of other objects' Ids. A record that is not in the Recycle Bin (never deleted, or emptied since) comes back as a failed row.
+- `validateRecords` is a dry run of `saveRecords`: it saves inside a savepoint and always rolls back, so validation rules, required fields, duplicate rules, triggers and flows run and nothing is kept. `recordId` is always `null`. Only database work is rolled back: emails, platform events published immediately and callouts queued by automation are not, so do not offer it on objects whose automation does those things.
 - FLS enforced via `Security.stripInaccessible` before every insert/update.
 
 ### GenericAggregateService
@@ -1275,6 +1535,38 @@ public static List<AggregateRow> aggregate(
 - Nulls are ignored by `SUM`, `AVG`, `MIN` and `MAX`, so an empty set gives `null`; `COUNT` gives `0`.
 - It is strict where `GenericQueryService` is forgiving: an unknown or unreadable field, `SUM`/`AVG` on a non-numeric field, an unsupported function or an invalid alias throws, because silently dropping an aggregate would return a different number than the one asked for.
 - Same security model as the query service: identifiers are validated against schema describes, aliases are only ever used as keys in the result (the query uses generated names), filter values are bound via `Database.queryWithBinds`, and it runs under `AccessLevel.USER_MODE`. `filters` takes the same `QueryFilter` list as `GenericQueryService.query`.
+
+**Search, HAVING and top-N** in one request object:
+
+```apex
+@AuraEnabled
+public static List<AggregateRow> summarize(AggregateRequest request)
+
+// AggregateRequest { objectApiName, aggregates, groupByFields, filters, searchTerm, searchFields,
+//                    havingConditions, orderBy, orderDirection, maxGroups }
+// AggregateCondition { alias, operatorName, value }
+```
+
+```js
+// The 10 owners with the most open pipeline, among those with more than 100,000.
+await summarize({
+    request: {
+        objectApiName: 'Opportunity',
+        aggregates: [{ functionName: 'SUM', fieldName: 'Amount', alias: 'pipeline' }],
+        groupByFields: ['Owner.Name'],
+        filters: [{ fieldName: 'IsClosed', operatorName: '=', value: false }],
+        havingConditions: [{ alias: 'pipeline', operatorName: '>', value: 100000 }],
+        orderBy: 'pipeline',
+        maxGroups: 10
+    }
+});
+```
+
+- `aggregate()` is `summarize()` with only the first five settings; both share one implementation.
+- `searchTerm`/`searchFields`: the datatable's search (a literal `LIKE` across the fields), so a totals row covers exactly the rows the table matches.
+- `havingConditions`: `=`, `!=`, `<`, `<=`, `>` or `>=` against an aggregate named by its alias. They need `groupByFields`. The value is bound and converted to the aggregate's type: a whole number for `COUNT` (and `SUM`, `MIN`, `MAX` of a whole-number field), a decimal otherwise, a date or date-time for `MIN`/`MAX` of one.
+- `orderBy`: an aggregate alias (default direction `DESC`) or one of the group-by fields (default `ASC`). Groups that tie are then ordered by the group-by fields, so the same request always returns the same groups. With an alias, null values come first ascending and last descending, which is SOQL's default.
+- Not cacheable, so totals recalculated after a save are never served a cached copy. (`aggregate()` stays cacheable.)
 
 ### SavedViewService
 
