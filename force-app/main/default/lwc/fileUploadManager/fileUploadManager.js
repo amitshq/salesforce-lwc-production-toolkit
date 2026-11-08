@@ -1,6 +1,6 @@
 import { LightningElement, api } from 'lwc';
 import getFilesForRecord from '@salesforce/apex/FileManagerService.getFilesForRecord';
-import deleteFile from '@salesforce/apex/FileManagerService.deleteFile';
+import removeFileFromRecord from '@salesforce/apex/FileManagerService.removeFileFromRecord';
 import { reduceApexErrors } from 'c/apexErrorUtils';
 import { showSuccessToast, showErrorToast } from 'c/toastService';
 import ConfirmDialog from 'c/confirmDialog';
@@ -51,7 +51,9 @@ export default class FileUploadManager extends LightningElement {
                 this.files = results.map((file) => ({
                     ...file,
                     sizeLabel: formatFileSize(file.contentSize),
-                    iconName: iconForExtension(file.fileExtension)
+                    iconName: iconForExtension(file.fileExtension),
+                    // Names the file, so a screen reader does not hear a list of identical "Remove" buttons.
+                    removeLabel: `Remove ${file.title}`
                 }));
             })
             .catch((error) => {
@@ -69,20 +71,24 @@ export default class FileUploadManager extends LightningElement {
         this.loadFiles();
     }
 
+    // A file attached to other records too is only taken off this one; otherwise it is deleted.
     async handleDeleteClick(event) {
         const { id, title } = event.currentTarget.dataset;
         const confirmed = await ConfirmDialog.open({
-            label: 'Delete File',
-            message: `Delete "${title}"? This cannot be undone.`,
+            label: 'Remove File',
+            message: `Remove "${title}" from this record? If it is not attached anywhere else, the file itself is deleted.`,
             variant: 'destructive',
-            confirmLabel: 'Delete'
+            confirmLabel: 'Remove'
         });
         if (!confirmed) {
             return;
         }
-        deleteFile({ contentDocumentId: id })
-            .then(() => {
-                showSuccessToast(this, `"${title}" deleted.`);
+        removeFileFromRecord({ contentDocumentId: id, recordId: this.recordId })
+            .then((outcome) => {
+                showSuccessToast(
+                    this,
+                    outcome === 'unlinked' ? `"${title}" removed from this record. It is still attached elsewhere.` : `"${title}" deleted.`
+                );
                 this.loadFiles();
             })
             .catch((error) => {

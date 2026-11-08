@@ -27,8 +27,8 @@
                             <div class="slds-media__figure slds-media__figure_reverse">
                                 <lightning-button-icon
                                     icon-name="utility:delete"
-                                    alternative-text="Delete"
-                                    title="Delete"
+                                    alternative-text={file.removeLabel}
+                                    title={file.removeLabel}
                                     data-id={file.contentDocumentId}
                                     data-title={file.title}
                                     onclick={handleDeleteClick}
