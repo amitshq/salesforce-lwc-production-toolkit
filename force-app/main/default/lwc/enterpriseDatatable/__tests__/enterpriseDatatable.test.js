@@ -12,6 +12,10 @@ import ConfirmDialog from 'c/confirmDialog';
 jest.mock('@salesforce/apex/GenericQueryService.query', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/GenericDmlService.saveRecords', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/GenericDmlService.deleteRecords', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/GenericDmlService.undeleteRecords', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/GenericQueryService.queryBatch', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/CursorPagingService.queryPage', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/GenericAggregateService.summarize', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/SavedViewService.getViews', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/SavedViewService.saveView', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('@salesforce/apex/SavedViewService.setDefaultView', () => ({ default: jest.fn() }), { virtual: true });
@@ -199,11 +203,16 @@ describe('c-enterprise-datatable', () => {
         queryRecords.mockResolvedValue(queryResult([{ Id: '001' }]));
         const element = createDatatable({ enableBulkDelete: true });
         await flushPromises();
+        element.shadowRoot
+            .querySelector('lightning-datatable')
+            .dispatchEvent(new CustomEvent('rowselection', { detail: { selectedRows: [{ Id: '001' }] } }));
+        await flushPromises();
 
         const bulkBar = element.shadowRoot.querySelector('c-bulk-action-bar');
         bulkBar.dispatchEvent(new CustomEvent('action', { detail: { name: '__bulkDelete' } }));
         await flushPromises();
 
+        expect(ConfirmDialog.open).toHaveBeenCalled();
         expect(deleteRecords).not.toHaveBeenCalled();
     });
 

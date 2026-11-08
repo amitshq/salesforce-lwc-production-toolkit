@@ -1,0 +1,27 @@
+<template>
+    <lightning-card title={label} icon-name={iconName}>
+        <div class="body slds-p-horizontal_medium" aria-busy={isLoading}>
+            <template lwc:if={hasError}>
+                <p class="error slds-text-color_error slds-text-body_small" role="alert">{errorMessage}</p>
+            </template>
+            <template lwc:elseif={isEmpty}>
+                <p class="empty slds-text-color_weak slds-text-body_small">{emptyMessage}</p>
+            </template>
+            <template lwc:if={hasItems}>
+                <ol class="top-list">
+                    <template for:each={items} for:item="item">
+                        <li key={item.key} class="top-item">
+                            <span class="rank slds-text-color_weak">{item.rank}</span>
+                            <span class="name slds-truncate" title={item.label}>{item.label}</span>
+                            <span class="value">{item.formattedValue}</span>
+                            <span class="bar-track" aria-hidden="true"><span class="bar" style={item.barStyle}></span></span>
+                        </li>
+                    </template>
+                </ol>
+            </template>
+            <template lwc:if={isLoading}>
+                <lightning-spinner alternative-text="Loading" size="small"></lightning-spinner>
+            </template>
+        </div>
+    </lightning-card>
+</template>

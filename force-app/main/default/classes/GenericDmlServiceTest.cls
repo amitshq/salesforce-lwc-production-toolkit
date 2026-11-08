@@ -220,4 +220,91 @@ private class GenericDmlServiceTest {
         System.assertEquals(true, byRowKey.get(String.valueOf(fine.Id)).success);
         System.assertEquals('Fine Edit', [SELECT Name FROM Account WHERE Id = :fine.Id].Name);
     }
+
+    private static Map<String, DmlResult> byRowKey(List<DmlResult> results) {
+        Map<String, DmlResult> mapped = new Map<String, DmlResult>();
+        for (DmlResult result : results) {
+            mapped.put(result.rowKey, result);
+        }
+        return mapped;
+    }
+
+    @IsTest
+    static void restoresDeletedRecordsFromTheRecycleBin() {
+        Account account = new Account(Name = 'Bring Me Back');
+        insert account;
+        delete account;
+
+        Test.startTest();
+        List<DmlResult> results = GenericDmlService.undeleteRecords('Account', new List<String>{ account.Id });
+        Test.stopTest();
+
+        System.assertEquals(1, results.size());
+        System.assertEquals(true, results[0].success, results[0].message);
+        System.assertEquals(account.Id, results[0].recordId);
+        System.assertEquals(1, [SELECT COUNT() FROM Account WHERE Id = :account.Id], 'The account is back.');
+    }
+
+    @IsTest
+    static void undeleteRefusesOtherObjectsAndReportsRecordsThatAreNotDeleted() {
+        Account deleted = new Account(Name = 'Deleted');
+        Account alive = new Account(Name = 'Never Deleted');
+        insert new List<Account>{ deleted, alive };
+        delete deleted;
+        Contact contact = new Contact(LastName = 'Not An Account');
+        insert contact;
+        delete contact;
+
+        Test.startTest();
+        Map<String, DmlResult> results = byRowKey(
+            GenericDmlService.undeleteRecords('Account', new List<String>{ deleted.Id, alive.Id, contact.Id, 'not-an-id' })
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, results.get(String.valueOf(deleted.Id)).success);
+        System.assertEquals(false, results.get(String.valueOf(alive.Id)).success, 'A record that is not in the Recycle Bin cannot be restored.');
+        System.assert(results.get(String.valueOf(contact.Id)).message.startsWith('Not a Account record'), results.get(String.valueOf(contact.Id)).message);
+        System.assertEquals(false, results.get('not-an-id').success);
+        System.assertEquals(0, [SELECT COUNT() FROM Contact WHERE Id = :contact.Id], 'The Contact stays deleted.');
+    }
+
+    @IsTest
+    static void aDryRunReportsWhatWouldFailAndKeepsNothing() {
+        Integer accountsBefore = [SELECT COUNT() FROM Account];
+
+        Test.startTest();
+        Map<String, DmlResult> results = byRowKey(
+            GenericDmlService.validateRecords(
+                'Account',
+                new List<DmlRecordInput>{
+                    new DmlRecordInput('2', new Map<String, Object>{ 'Name' => 'Would Be Created' }),
+                    new DmlRecordInput('3', new Map<String, Object>{ 'Industry' => 'Technology' })
+                }
+            )
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, results.get('2').success, results.get('2').message);
+        System.assertEquals(null, results.get('2').recordId, 'Nothing was kept, so there is no Id to report.');
+        System.assertEquals(false, results.get('3').success, 'Name is required.');
+        System.assertEquals(accountsBefore, [SELECT COUNT() FROM Account], 'The dry run created nothing.');
+    }
+
+    @IsTest
+    static void aDryRunOfAnUpdateLeavesTheRecordUnchanged() {
+        Account account = new Account(Name = 'Original');
+        insert account;
+
+        Test.startTest();
+        List<DmlResult> results = GenericDmlService.validateRecords(
+            'Account',
+            new List<DmlRecordInput>{
+                new DmlRecordInput(account.Id, new Map<String, Object>{ 'Id' => account.Id, 'Name' => 'Changed' })
+            }
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, results[0].success, results[0].message);
+        System.assertEquals('Original', [SELECT Name FROM Account WHERE Id = :account.Id].Name);
+    }
 }

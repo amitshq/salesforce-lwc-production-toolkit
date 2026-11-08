@@ -1,0 +1,43 @@
+.body {
+    position: relative;
+    min-height: 2rem;
+}
+
+.top-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.top-item {
+    display: grid;
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+    column-gap: 0.5rem;
+    align-items: baseline;
+    padding: 0.375rem 0;
+}
+
+.rank {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.bar-track {
+    grid-column: 2 / 4;
+    height: 0.25rem;
+    margin-top: 0.25rem;
+    border-radius: 0.125rem;
+    background: var(--slds-g-color-neutral-base-95, #f3f3f3);
+    overflow: hidden;
+}
+
+.bar {
+    display: block;
+    height: 100%;
+    background: var(--slds-g-color-brand-base-50, #0176d3);
+}

@@ -14,13 +14,20 @@
       category: 'Data components',
       kind: 'LWC',
       path: 'lwc/enterpriseDatatable',
-      tagline: 'The flagship: server-side query, pagination, sorting, filtering, inline edit, bulk actions, and partial-error reporting for any object.',
+      tagline: 'The flagship: server-side query, paging, sorting, filters, inline edit with picklist and lookup editors, row actions, mass update, export, totals and undo for any object.',
       usage:
-        '<c-enterprise-datatable\n    object-api-name="Account"\n    title="Accounts"\n    columns={columns}\n    page-size="25"\n    pagination-mode="pages"\n    search-fields={searchFields}\n    bulk-actions={bulkActions}\n    enable-row-selection\n    enable-bulk-delete\n    default-sort-field="Name"\n    onbulkaction={handleBulkAction}\n></c-enterprise-datatable>',
+        '<c-enterprise-datatable\n    object-api-name="Account"\n    title="Accounts"\n    columns={columns}\n    search-fields={searchFields}\n    enable-row-selection\n    row-actions="view,edit,delete"\n    enable-mass-update\n    enable-export\n    totals={totals}\n    enable-bulk-delete\n    default-sort-field="Name"\n></c-enterprise-datatable>\n\ncolumns = [\n    { label: \'Name\', fieldName: \'Name\', editable: true, linkToRecord: true },\n    { label: \'Industry\', fieldName: \'Industry\', type: \'picklist\', editable: true },\n    { label: \'Parent\', fieldName: \'ParentId\', type: \'lookup\', editable: true,\n      displayField: \'Parent.Name\', typeAttributes: { objectApiName: \'Account\' } },\n    { label: \'Revenue\', fieldName: \'AnnualRevenue\', type: \'currency\', editable: true }\n];\ntotals = [{ fieldName: \'AnnualRevenue\', functionName: \'SUM\' }];',
       api: [
         ['objectApiName', 'String', '— (required)', 'The sObject to query, e.g. \'Account\'.'],
-        ['columns', 'Array', '[]', 'Standard lightning-datatable columns, plus filterable/filterOperator.'],
+        ['columns', 'Array', '[]', "Standard lightning-datatable columns, plus filterable/filterOperator, linkToRecord (a link to the record, still editable), and the editable types 'picklist' (options from the field, or options), 'lookup' (typeAttributes.objectApiName, displayField) and 'richText'."],
         ['pageSize', 'Number', '25', 'Rows per page/batch.'],
+        ['rowActions', 'String | Array', '—', "'view,edit,delete' or [{ label, name, iconName }]. View and Edit open the record; Delete asks, then can be undone; others fire rowaction. Edit and Delete only show for users who can edit or delete the object."],
+        ['enableMassUpdate', 'Boolean', 'false', "'Update field' bulk action: one editable column, one value, every selected row. Saved 200 rows at a time with conflict checks; failed rows stay as drafts to retry."],
+        ['enableExport', 'Boolean', 'false', 'Export button: every row matching the search and filters (not just the selection) to CSV, in the table\'s sort order, with progress and cancel.'],
+        ['maxExportRows / exportFileName', 'Number / String', "50000 / '<Object>-export.csv'", 'The export stops at maxExportRows and says so.'],
+        ['totals', 'Array', '[]', "A totals row over every matching row, computed server-side: [{ fieldName, functionName: 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT', label? }]."],
+        ['deepPaging', 'Boolean', 'false', 'Page with an Apex pagination cursor (CursorPagingService) instead of OFFSET: reaches 100,000 rows, in any sort order, instead of 2,000.'],
+        ['recordUrlTemplate', 'String', "'/lightning/r/{recordId}/view'", "The link pattern for linkToRecord and lookup cells, e.g. '/s/detail/{recordId}' in an Experience Cloud site."],
         ['paginationMode', 'String', "'pages'", "'pages' or 'infinite'."],
         ['searchFields', 'Array<String>', '[]', 'Fields the global search box searches.'],
         ['staticFilters', 'Array', '[]', 'Always-applied filters: [{ fieldName, operatorName, value }].'],
@@ -32,11 +39,17 @@
         ['autoRefresh', 'Boolean', 'false', 'Follow changes made elsewhere (needs Change Data Capture on the object). Reloads quietly only when nothing is being edited or selected; otherwise shows a "records changed" bar.']
       ],
       events: [
-        ['bulkaction', '{ name, selectedRows }', 'A bulkActions entry (not the built-in delete) was clicked.'],
+        ['bulkaction', '{ name, selectedRows }', 'A bulkActions entry (not a built-in one) was clicked.'],
+        ['rowaction', '{ name, action, row }', 'Any row action, built-in ones included. Call preventDefault() to replace a built-in one.'],
+        ['load', '{ records, totalCount, pageNumber, pageSize }', 'A page of records arrived.'],
+        ['save', '{ source, savedIds, failedRows }', "An inline save or mass update finished; source is 'inline' or 'massUpdate'."],
+        ['delete / restore', '{ recordIds }', 'Records were deleted from the table, or brought back with Undo.'],
+        ['export', '{ rowCount, truncated }', 'A CSV export was downloaded.'],
         ['liveerror', '{ message }', 'auto-refresh could not subscribe; the table keeps working without live updates.']
       ],
       methods: [
         ['refresh()', 'Promise<void>', 'Re-runs the current query; clears selection/in-progress edits.'],
+        ['exportAll()', 'Promise<{ rowCount, truncated } | { cancelled }>', 'Runs the export, as the export button does.'],
         ['applyConfig(config)', 'Promise<void>', 'Applies a layout from currentConfig or a saved view (columns, sort, search, filters) and re-queries from page 1. Unknown columns are ignored; null resets to the defaults.'],
         ['currentConfig', 'Object', 'Getter: the table\'s current layout as a plain, JSON-safe object.']
       ]
@@ -74,7 +87,8 @@
         ['objectApiName', 'String', '— (required)', 'The sObject to insert into / update.'],
         ['fields', 'Array', '[]', '[{ apiName, label, type, required }] — the fields a column may be mapped to. type: text, number/currency/percent, checkbox, date, datetime, email.'],
         ['chunkSize', 'Number', '200', 'Rows per GenericDmlService.saveRecords call; each chunk is its own transaction.'],
-        ['maxRows', 'Number', '5000', 'Larger files are refused with a message (the file limit is 5 MB).']
+        ['maxRows', 'Number', '5000', 'Larger files are refused with a message (the file limit is 5 MB).'],
+        ['enableServerCheck', 'Boolean', 'false', "Adds 'Check against Salesforce' to the review step: a dry run (GenericDmlService.validateRecords) that saves and rolls back, so validation rules and automation flag rows before the import. Rows that would fail are skipped. Off by default: work automation does outside the database, such as emails, is not rolled back."]
       ],
       events: [['importcomplete', '{ successCount, failureCount, validationFailureCount, notAttemptedCount, emptyRowCount }', 'The import finished, or was cancelled between chunks.']],
       methods: [['reset()', 'void', 'Back to the upload step; call it when the surrounding modal closes.']]
@@ -112,6 +126,103 @@
         ['visibleFields', 'Array<String>', 'null', 'The fields currently shown; omit or null for all.']
       ],
       events: [['change', '{ visibleFields }', 'A box was toggled, or "Show all" was clicked. Always in column order.']]
+    },
+    {
+      id: 'extended-datatable',
+      name: 'c-extended-datatable',
+      category: 'Data components',
+      kind: 'LWC',
+      path: 'lwc/extendedDatatable',
+      tagline: 'lightning-datatable plus four inline-editable column types: picklist, lookup, rich text and record link.',
+      usage:
+        "<c-extended-datatable key-field=\"Id\" data={rows} columns={columns} onsave={handleSave}></c-extended-datatable>\n\ncolumns = [\n    { label: 'Industry', fieldName: 'Industry', type: 'picklist', editable: true,\n      typeAttributes: { options: industryOptions, placeholder: 'Choose one' } },\n    { label: 'Notes', fieldName: 'Notes__c', type: 'richText', editable: true, wrapText: true }\n];",
+      api: [
+        ['picklist', 'type', '—', 'typeAttributes: { options, placeholder, label }. Edited with a dropdown.'],
+        ['lookup', 'type', '—', 'typeAttributes: { objectApiName, displayValue, originalValue, nameField, urlTemplate, label }. Edited with a record picker; shows the related name, linked.'],
+        ['richText', 'type', '—', 'Formatted text, edited with a rich-text editor. typeAttributes: { label }.'],
+        ['recordLink', 'type', '—', 'The value as a link, edited as text. typeAttributes: { url, target, label }.']
+      ],
+      methods: [['Usually', '—', 'c-enterprise-datatable builds these typeAttributes from its column config and uses this table only when a column needs one of these types.']]
+    },
+    {
+      id: 'mass-update-dialog',
+      name: 'c-mass-update-dialog',
+      category: 'Data components',
+      kind: 'LWC',
+      path: 'lwc/massUpdateDialog',
+      tagline: 'The "Update field" dialog: choose a field and a value to set on every selected row. An empty value clears the field, and says so.',
+      usage:
+        "import MassUpdateDialog from 'c/massUpdateDialog';\n\nconst choice = await MassUpdateDialog.open({ size: 'small', recordCount: rows.length, fields });\nif (choice) {\n    // choice.fieldName, choice.value (null clears the field)\n}",
+      api: [
+        ['fields', 'Array', '[]', "[{ fieldName, label, type, options?, objectApiName? }]. The input follows the type: dropdown, record picker, checkbox, rich text, number, date or text."],
+        ['recordCount', 'Number', '0', 'Shown in the buttons: "Update 12 records", "Clear on 12 records".']
+      ],
+      methods: [['open(options)', 'Promise<{ fieldName, value } | undefined>', 'undefined when cancelled.']]
+    },
+    {
+      id: 'datatable-lookup-cell',
+      name: 'c-datatable-lookup-cell',
+      category: 'Data components',
+      kind: 'LWC',
+      path: 'lwc/datatableLookupCell',
+      tagline: 'How a lookup cell shows its record: the loaded name, or, once another record is picked, its name read from Lightning Data Service.',
+      usage:
+        '<c-datatable-lookup-cell\n    value={recordId}\n    original-value={loadedId}\n    display-value={loadedName}\n    object-api-name="Account"\n    url-template="/lightning/r/{recordId}/view"\n></c-datatable-lookup-cell>',
+      api: [
+        ['value / originalValue', 'String', '—', 'The Id in the cell, and the Id it was loaded with. When they differ the name is read again.'],
+        ['displayValue', 'String', '—', 'The name loaded with the row.'],
+        ['objectApiName / nameField', 'String', "— / 'Name'", 'Where to read the name from, e.g. Case and CaseNumber.'],
+        ['urlTemplate', 'String', '—', 'Links the name; without it the name is plain text.']
+      ]
+    },
+    {
+      id: 'datatable-lookup-editor',
+      name: 'c-datatable-lookup-editor',
+      category: 'Data components',
+      kind: 'LWC',
+      path: 'lwc/datatableLookupEditor',
+      tagline: 'A record picker that behaves like an input for lightning-datatable\'s inline-edit panel: value, validity, focus, change.',
+      usage: '<c-datatable-lookup-editor object-api-name="Account" value={editedValue} data-inputable="true"></c-datatable-lookup-editor>',
+      api: [
+        ['objectApiName', 'String', '—', 'The object to pick from.'],
+        ['value', 'String', 'null', 'The chosen record Id; null once cleared.'],
+        ['label', 'String', "'Record'", 'Accessible label (shown hidden).']
+      ],
+      events: [['change', '{ value }', 'A record was picked or cleared.']]
+    },
+    {
+      id: 'datatable-rich-text-editor',
+      name: 'c-datatable-rich-text-editor',
+      category: 'Data components',
+      kind: 'LWC',
+      path: 'lwc/datatableRichTextEditor',
+      tagline: 'A rich-text editor that behaves like an input for lightning-datatable\'s inline-edit panel.',
+      usage: '<c-datatable-rich-text-editor label="Notes" value={editedValue} data-inputable="true"></c-datatable-rich-text-editor>',
+      api: [
+        ['value', 'String', "''", 'HTML.'],
+        ['label', 'String', "'Text'", 'Shown above the editor.']
+      ],
+      events: [['change', '{ value }', 'The text changed.']]
+    },
+    {
+      id: 'aggregate-top-list',
+      name: 'c-aggregate-top-list',
+      category: 'Data components',
+      kind: 'LWC',
+      path: 'lwc/aggregateTopList',
+      tagline: 'A ranked top-N list computed server-side, e.g. the 10 owners with the most open pipeline, with bars scaled to the leader.',
+      usage:
+        "<c-aggregate-top-list\n    label=\"Top owners by open pipeline\"\n    object-api-name=\"Opportunity\"\n    group-by-field=\"Owner.Name\"\n    function-name=\"SUM\"\n    field-name=\"Amount\"\n    filters={openFilters}\n    max-items=\"10\"\n    format=\"currency\"\n></c-aggregate-top-list>",
+      api: [
+        ['objectApiName / groupByField', 'String', '— (required)', 'What to rank, and by which field (relationship paths allowed).'],
+        ['functionName / fieldName', 'String', "'COUNT' / —", 'COUNT, SUM, AVG, MIN or MAX, and the field it aggregates.'],
+        ['maxItems', 'Number', '10', 'How many groups to show (at most 200).'],
+        ['orderDirection', 'String', "'DESC'", "'DESC' ranks the highest first, 'ASC' the lowest."],
+        ['filters', 'Array', '[]', 'QueryFilter[] applied before grouping.'],
+        ['havingConditions', 'Array', '[]', "Keeps only groups whose value passes: [{ alias: 'value', operatorName: '>', value: 100000 }]."],
+        ['format / currencyCode', 'String', "'number'", "'number', 'currency' or 'percent'."]
+      ],
+      methods: [['refresh()', 'Promise<void>', 'Re-runs the query. It also re-runs when a setting changes, and ignores a slow answer a newer query has overtaken.']]
     },
     {
       id: 'multi-select-lookup',
@@ -460,6 +571,23 @@
       ]
     },
     {
+      id: 'datatable-helpers',
+      name: 'datatableHelpers',
+      category: 'Data utilities',
+      kind: 'JS module',
+      path: 'lwc/datatableHelpers',
+      tagline: 'The pure helpers behind the datatable: row actions, record links, sorting and chunking rows, and formatting totals.',
+      usage: "import { normalizeRowActions, sortRows, toChunks, formatNumber } from 'c/datatableHelpers';\n\nnormalizeRowActions('view,edit'); // [{ label: 'View', name: 'view' }, ...]\nformatNumber(1234.5, 'currency');  // '$1,234.50' in the user's locale",
+      functions: [
+        ['normalizeRowActions(value)', "A comma list or array of names / { label, name, iconName } into lightning-datatable rowActions; view, edit and delete get default labels."],
+        ['recordUrl(template, recordId)', "Fills {recordId} in a link pattern; undefined without an Id."],
+        ['sortRows(rows, fieldName, direction) / compareRows', 'Sorts like the query service: empty values last, text without regard to case; stable, so ties keep their order.'],
+        ['toChunks(items, size)', 'Consecutive chunks of at most size.'],
+        ['richTextToPlainText(html)', 'Plain text for a CSV cell.'],
+        ['formatNumber(value, format, currencyCode?)', "number, currency or percent in the user's locale; an em dash for no value."]
+      ]
+    },
+    {
       id: 'function-utils',
       name: 'functionUtils',
       category: 'Data utilities',
@@ -714,8 +842,9 @@
       methods: [
         ['Returns', 'QueryResult', '{ records, totalCount, pageNumber, pageSize, hasMore }'],
         ['queryWithCursor', 'CursorQueryResult', 'Keyset pagination, always Id ASC: { records, hasMore, nextCursor }. Cheap at any depth, but no total count or jump-to-page.'],
+        ['queryBatch', 'CursorQueryResult', 'The same keyset walk for reading every matching row (the datatable export): up to 2,000 rows a call, and not cacheable, so it is never stale.'],
         ['Relationship paths', '—', "Owner.Name style paths are validated hop by hop, resolving relationship names (Owner) to their lookup fields (OwnerId)."],
-        ['Paging limit', 'maxPageNumber', 'SOQL refuses an OFFSET above 2,000, so pages past it are refused with a clear message; results always end with an Id tiebreaker so pages are stable.'],
+        ['Paging limit', 'maxPageNumber', 'SOQL refuses an OFFSET above 2,000, so pages past it are refused with a clear message (CursorPagingService reaches 100,000); results always end with an Id tiebreaker so pages are stable.'],
         ['Security', '—', 'Identifiers validated against schema describes; values bound via Database.queryWithBinds; runs under AccessLevel.USER_MODE.']
       ]
     },
@@ -725,13 +854,15 @@
       category: 'Apex services',
       kind: 'Apex',
       path: 'classes/GenericDmlService.cls',
-      tagline: 'Bulk insert/update/delete with allOrNone=false and a per-row result, so one bad row never blocks the batch.',
+      tagline: 'Bulk insert/update/delete/undelete with allOrNone=false and a per-row result, plus a dry run that saves and rolls back.',
       usage:
-        '@AuraEnabled\npublic static List<DmlResult> saveRecords(String objectApiName, List<DmlRecordInput> records)\n\n@AuraEnabled\npublic static List<DmlResult> deleteRecords(String objectApiName, List<String> recordIds)',
+        '@AuraEnabled\npublic static List<DmlResult> saveRecords(String objectApiName, List<DmlRecordInput> records)\n\n@AuraEnabled\npublic static List<DmlResult> validateRecords(String objectApiName, List<DmlRecordInput> records) // dry run\n\n@AuraEnabled\npublic static List<DmlResult> deleteRecords(String objectApiName, List<String> recordIds)\n\n@AuraEnabled\npublic static List<DmlResult> undeleteRecords(String objectApiName, List<String> recordIds)',
       methods: [
         ['DmlRecordInput', '{ rowKey, fields, expectedModstamp }', 'fields is a map of API name to value; include Id to update, omit to insert. expectedModstamp (epoch ms of the SystemModstamp you loaded) makes an update fail instead of overwriting a newer change.'],
         ['DmlResult', '{ rowKey, recordId, success, message, fieldNames, isConflict, modstamp }', 'One per input row. isConflict marks a rejected stale edit; modstamp is the new stamp after a successful checked update.'],
         ['Conflict check', '—', 'Compare-then-write, not a lock: it narrows the window rather than closing it. Skipped for objects without SystemModstamp.'],
+        ['validateRecords', 'List<DmlResult>', 'saveRecords inside a savepoint that is always rolled back: validation rules, required fields, duplicate rules and automation run, nothing is kept. Effects outside the database (emails, events published immediately) are not undone.'],
+        ['undeleteRecords', 'List<DmlResult>', 'Restores records from the Recycle Bin (the datatable\'s Undo). Ids of another object are refused, as for deleteRecords.'],
         ['Security', '—', 'FLS enforced via Security.stripInaccessible before every insert/update.']
       ]
     },
@@ -741,13 +872,29 @@
       category: 'Apex services',
       kind: 'Apex',
       path: 'classes/GenericAggregateService.cls',
-      tagline: 'COUNT / SUM / AVG / MIN / MAX with optional GROUP BY for any object, with the same safety model as the query service.',
+      tagline: 'COUNT / SUM / AVG / MIN / MAX with GROUP BY, HAVING and top-N for any object, with the same safety model as the query service.',
       usage:
         '@AuraEnabled(cacheable=true)\npublic static List<AggregateRow> aggregate(\n    String objectApiName, List<AggregateSpec> aggregates, List<String> groupByFields,\n    List<QueryFilter> filters, Integer maxGroups\n)\n\n// AggregateSpec { functionName, fieldName, alias }\n// AggregateRow  { groups: Map<field, value>, values: Map<alias, value> }',
       methods: [
         ['Grouping', '—', 'Up to 3 group-by fields (relationship paths allowed), ordered by them; maxGroups defaults to 50 and is capped at 200.'],
+        ['summarize(AggregateRequest)', 'List<AggregateRow>', "aggregate() plus searchTerm/searchFields, havingConditions ([{ alias, operatorName, value }]) and orderBy (an alias or group-by field) with orderDirection: ordering by an aggregate with maxGroups is a top-N. Not cacheable, so totals are fresh after a save."],
         ['Strictness', '—', 'An unknown or unreadable field, a SUM/AVG on a non-numeric field, or a bad alias is an error, not a silent drop - dropping it would return a different number than asked for.'],
         ['Security', '—', 'Identifiers validated against schema describes; aliases only ever used as map keys; filter values bound; runs under AccessLevel.USER_MODE.']
+      ]
+    },
+    {
+      id: 'cursor-paging-service-apex',
+      name: 'CursorPagingService.cls',
+      category: 'Apex services',
+      kind: 'Apex',
+      path: 'classes/CursorPagingService.cls',
+      tagline: 'Page-by-page browsing past SOQL\'s 2,000-row OFFSET limit, in any sort order, with an Apex pagination cursor. Behind the datatable\'s deep-paging.',
+      usage:
+        '@AuraEnabled\npublic static QueryResult queryPage(\n    String objectApiName, List<String> fields, List<QueryFilter> filters,\n    String sortField, String sortDirection, String searchTerm, List<String> searchFields,\n    Integer pageNumber, Integer pageSize\n)',
+      methods: [
+        ['Returns', 'QueryResult', 'The same shape as GenericQueryService.query; maxPageNumber is the last page inside the first 100,000 rows.'],
+        ['Limits', '—', 'A pagination cursor holds 100,000 rows, and each call opens one: an org can open 200,000 a day. The only class that needs API 66.0 (Spring \'26).'],
+        ['Security', '—', 'Validated by GenericQueryService.plan (describe allow-list, bound values); the count and the cursor run in user mode.']
       ]
     },
     {

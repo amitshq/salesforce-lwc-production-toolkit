@@ -14,11 +14,16 @@ public with sharing class QueryResult {
     @AuraEnabled public Integer maxPageNumber;
 
     public QueryResult(List<SObject> records, Integer totalCount, Integer pageNumber, Integer pageSize) {
+        this(records, totalCount, pageNumber, pageSize, MAX_OFFSET / pageSize + 1);
+    }
+
+    /** For a pager with a different reach than OFFSET's, such as CursorPagingService's 100,000 rows. */
+    public QueryResult(List<SObject> records, Integer totalCount, Integer pageNumber, Integer pageSize, Integer maxPageNumber) {
         this.records = records;
         this.totalCount = totalCount;
         this.pageNumber = pageNumber;
         this.pageSize = pageSize;
-        this.maxPageNumber = MAX_OFFSET / pageSize + 1;
+        this.maxPageNumber = maxPageNumber;
         this.hasMore = (pageNumber * pageSize) < totalCount && pageNumber < this.maxPageNumber;
     }
 }

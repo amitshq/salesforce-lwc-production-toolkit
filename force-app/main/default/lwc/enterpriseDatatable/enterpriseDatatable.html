@@ -1,5 +1,16 @@
 <template>
     <lightning-card title={title} icon-name="standard:related_list">
+        <template if:true={enableExport}>
+            <lightning-button-icon
+                slot="actions"
+                class="export-button slds-m-right_xx-small"
+                icon-name="utility:download"
+                alternative-text="Export all matching records to CSV"
+                title="Export all matching records to CSV"
+                disabled={isExporting}
+                onclick={handleExportClick}
+            ></lightning-button-icon>
+        </template>
         <template if:true={enableColumnChooser}>
             <lightning-button-icon
                 slot="actions"
@@ -79,6 +90,41 @@
             </div>
         </template>
 
+        <template if:true={hasUndo}>
+            <div class="undo-bar slds-p-horizontal_medium slds-p-bottom_small">
+                <div class="slds-notify slds-notify_alert slds-theme_alt-inverse slds-grid slds-grid_vertical-align-center" role="status">
+                    <span class="slds-col slds-has-flexi-truncate">{undoState.message}</span>
+                    <lightning-button
+                        class="undo-button"
+                        label="Undo"
+                        variant="inverse"
+                        disabled={isRestoring}
+                        onclick={handleUndoDelete}
+                    ></lightning-button>
+                    <lightning-button-icon
+                        class="undo-dismiss slds-m-left_x-small"
+                        icon-name="utility:close"
+                        variant="bare-inverse"
+                        alternative-text="Dismiss"
+                        title="Dismiss"
+                        onclick={handleUndoDismiss}
+                    ></lightning-button-icon>
+                </div>
+            </div>
+        </template>
+
+        <template if:true={isExporting}>
+            <div class="export-progress slds-p-horizontal_medium slds-p-bottom_small slds-grid slds-grid_vertical-align-center" role="status">
+                <lightning-spinner alternative-text="Exporting" size="x-small" class="slds-is-relative slds-m-right_small"></lightning-spinner>
+                <span class="slds-col">{exportProgressLabel}</span>
+                <lightning-button class="export-cancel" label="Cancel export" onclick={handleCancelExport}></lightning-button>
+            </div>
+        </template>
+
+        <template if:true={hasSaveProgress}>
+            <p class="save-progress slds-p-horizontal_medium slds-p-bottom_small slds-text-body_small" role="status">{saveProgress}</p>
+        </template>
+
         <c-state-manager
             is-loading={isInitialLoading}
             has-error={hasError}
@@ -86,24 +132,69 @@
             is-empty={isEmpty}
             empty-title="No records found"
         >
-            <lightning-datatable
-                key-field={keyField}
-                data={records}
-                columns={tableColumns}
-                sorted-by={tableSortedBy}
-                sorted-direction={sortedDirection}
-                onsort={handleSort}
-                draft-values={draftValues}
-                oncellchange={handleCellChange}
-                onsave={handleSave}
-                oncancel={handleCancelEdit}
-                errors={datatableErrors}
-                is-loading={isReloading}
-                hide-checkbox-column={hideCheckboxColumn}
-                onrowselection={handleRowSelection}
-                selected-rows={selectedRows}
-            ></lightning-datatable>
+            <!-- The two tables take the same attributes: keep them in step. -->
+            <template if:true={usesExtendedTypes}>
+                <c-extended-datatable
+                    class="records-table"
+                    key-field={keyField}
+                    data={records}
+                    columns={tableColumns}
+                    sorted-by={tableSortedBy}
+                    sorted-direction={sortedDirection}
+                    onsort={handleSort}
+                    draft-values={draftValues}
+                    oncellchange={handleCellChange}
+                    onsave={handleSave}
+                    oncancel={handleCancelEdit}
+                    errors={datatableErrors}
+                    is-loading={isReloading}
+                    hide-checkbox-column={hideCheckboxColumn}
+                    onrowselection={handleRowSelection}
+                    onrowaction={handleRowAction}
+                    selected-rows={selectedRowKeys}
+                ></c-extended-datatable>
+            </template>
+            <template if:false={usesExtendedTypes}>
+                <lightning-datatable
+                    class="records-table"
+                    key-field={keyField}
+                    data={records}
+                    columns={tableColumns}
+                    sorted-by={tableSortedBy}
+                    sorted-direction={sortedDirection}
+                    onsort={handleSort}
+                    draft-values={draftValues}
+                    oncellchange={handleCellChange}
+                    onsave={handleSave}
+                    oncancel={handleCancelEdit}
+                    errors={datatableErrors}
+                    is-loading={isReloading}
+                    hide-checkbox-column={hideCheckboxColumn}
+                    onrowselection={handleRowSelection}
+                    onrowaction={handleRowAction}
+                    selected-rows={selectedRowKeys}
+                ></lightning-datatable>
+            </template>
         </c-state-manager>
+
+        <template if:true={hasTotals}>
+            <div class="totals slds-p-horizontal_small slds-p-vertical_x-small slds-border_top" aria-live="polite">
+                <template if:true={hasTotalsError}>
+                    <p class="totals-error slds-text-body_small slds-text-color_error">{totalsError}</p>
+                </template>
+                <template if:false={hasTotalsError}>
+                    <p class="slds-text-body_small slds-text-color_weak">{totalsCaption}</p>
+                    <dl class="totals-list slds-grid slds-wrap">
+                        <template for:each={totalsItems} for:item="item">
+                            <div key={item.key} class="totals-item slds-m-right_large">
+                                <dt class="slds-text-body_small slds-text-color_weak">{item.label}</dt>
+                                <dd class="totals-value slds-text-heading_small">{item.value}</dd>
+                            </div>
+                        </template>
+                    </dl>
+                </template>
+            </div>
+        </template>
 
         <c-bulk-action-bar
             selected-count={selectedRows.length}

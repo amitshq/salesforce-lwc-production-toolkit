@@ -1,0 +1,10 @@
+<template>
+    <template lwc:if={hasValue}>
+        <template lwc:if={href}>
+            <a class="slds-truncate" href={href} title={label}>{label}</a>
+        </template>
+        <template lwc:else>
+            <span class="slds-truncate" title={label}>{label}</span>
+        </template>
+    </template>
+</template>

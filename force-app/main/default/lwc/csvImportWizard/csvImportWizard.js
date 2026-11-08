@@ -1,5 +1,6 @@
 import { LightningElement, api } from 'lwc';
 import saveRecords from '@salesforce/apex/GenericDmlService.saveRecords';
+import validateRecords from '@salesforce/apex/GenericDmlService.validateRecords';
 import { reduceApexErrors } from 'c/apexErrorUtils';
 import { parseCsvTable, exportRowsToCsv } from 'c/csvUtils';
 import { ID_FIELD, autoMapColumns, validateMapping, buildRecords } from 'c/csvImportEngine';
@@ -23,6 +24,10 @@ function readFileAsText(file) {
         reader.onerror = () => reject(new Error('The file could not be read.'));
         reader.readAsText(file, 'UTF-8');
     });
+}
+
+function idleServerCheck() {
+    return { status: 'idle', checked: 0, total: 0, failed: 0, message: '' };
 }
 
 function splitOutcomes(results) {
@@ -52,6 +57,14 @@ function splitOutcomes(results) {
  * accident. Each chunk is its own transaction: a large import is not
  * all-or-nothing, and a cancel stops after the chunk in flight.
  *
+ * With `enable-server-check`, the review step can also check the rows against
+ * Salesforce before importing: GenericDmlService.validateRecords saves each chunk
+ * and rolls it back, so validation rules, required fields, duplicate rules and
+ * automation all have their say. Rows that would fail join the problem list and
+ * are skipped. It is off by default because the check runs triggers and flows, and
+ * anything they do outside the database (emails, platform events, callouts) is not
+ * rolled back. A passing row can still fail at import if the data changes first.
+ *
  * @example
  * <c-csv-import-wizard
  *     object-api-name="Account"
@@ -69,6 +82,7 @@ export default class CsvImportWizard extends LightningElement {
     @api fields = [];
     @api chunkSize = 200;
     @api maxRows = 5000;
+    @api enableServerCheck = false;
 
     step = 'upload';
     fileName = '';
@@ -83,6 +97,7 @@ export default class CsvImportWizard extends LightningElement {
     isImporting = false;
     result;
     serverFailures = [];
+    serverCheck = idleServerCheck();
 
     @api
     reset() {
@@ -99,6 +114,7 @@ export default class CsvImportWizard extends LightningElement {
         this.isImporting = false;
         this.result = undefined;
         this.serverFailures = [];
+        this.serverCheck = idleServerCheck();
     }
 
     get steps() {
@@ -228,7 +244,43 @@ export default class CsvImportWizard extends LightningElement {
     }
 
     get cannotImport() {
-        return this.build.records.length === 0;
+        return this.build.records.length === 0 || this.isCheckingServer;
+    }
+
+    get canCheckServer() {
+        return this.enableServerCheck && this.build.records.length > 0 && this.serverCheck.status !== 'done';
+    }
+
+    get isCheckingServer() {
+        return this.serverCheck.status === 'running';
+    }
+
+    get hasServerCheckResult() {
+        return this.serverCheck.status !== 'idle';
+    }
+
+    get serverCheckButtonLabel() {
+        return this.serverCheck.status === 'failed' ? 'Check again' : 'Check against Salesforce';
+    }
+
+    get serverCheckText() {
+        const { status, checked, total, failed, message } = this.serverCheck;
+        if (status === 'running') {
+            return `Checking ${checked} of ${total} rows against Salesforce...`;
+        }
+        if (status === 'failed') {
+            return `The check stopped after ${checked} of ${total} rows: ${message}`;
+        }
+        const rows = `${checked} row${checked === 1 ? '' : 's'}`;
+        if (!failed) {
+            return `Checked ${rows} against Salesforce: all would import.`;
+        }
+        return `Checked ${rows} against Salesforce: ${checked - failed} would import, ${failed} would fail and will be skipped (listed above).`;
+    }
+
+    get serverCheckClass() {
+        const tone = this.serverCheck.status === 'failed' ? 'slds-text-color_error' : 'slds-text-color_weak';
+        return `server-check-text slds-text-body_small slds-p-bottom_small ${tone}`;
     }
 
     get importButtonLabel() {
@@ -311,7 +363,57 @@ export default class CsvImportWizard extends LightningElement {
             return;
         }
         this.build = buildRecords({ rows: this.rows, mapping: this.mapping, fields: this.fields });
+        this.serverCheck = idleServerCheck();
         this.step = 'review';
+    }
+
+    /**
+     * Saves the rows chunk by chunk and rolls each chunk back, then moves the rows
+     * Salesforce rejected from the import into the problem list. If a chunk cannot be
+     * checked at all, the rows checked so far keep their results; the rest stay in the
+     * import unchecked, and the user can check again.
+     */
+    async handleServerCheck() {
+        const records = this.build.records;
+        const size = Math.max(1, Number(this.chunkSize) || 200);
+        const rejected = new Map();
+        let checked = 0;
+        let message = '';
+        this.serverCheck = { status: 'running', checked: 0, total: records.length, failed: 0, message: '' };
+
+        for (let start = 0; start < records.length; start += size) {
+            const chunk = records.slice(start, start + size);
+            try {
+                // One chunk at a time, like the import itself.
+                // eslint-disable-next-line no-await-in-loop
+                const results = await validateRecords({
+                    objectApiName: this.objectApiName,
+                    records: chunk.map((record) => ({ rowKey: String(record.rowNumber), fields: record.fields }))
+                });
+                results.filter((outcome) => !outcome.success).forEach((outcome) => rejected.set(Number(outcome.rowKey), outcome));
+            } catch (error) {
+                message = reduceApexErrors(error).join(' ');
+                break;
+            }
+            checked += chunk.length;
+            this.serverCheck = { ...this.serverCheck, checked };
+        }
+
+        const newErrors = [];
+        rejected.forEach((outcome, rowNumber) => {
+            newErrors.push({
+                rowNumber,
+                fieldLabel: (outcome.fieldNames || []).join(', '),
+                message: outcome.message || 'Salesforce would not save this row.'
+            });
+        });
+        this.build = {
+            ...this.build,
+            records: records.filter((record) => !rejected.has(record.rowNumber)),
+            errors: [...this.build.errors, ...newErrors].sort((a, b) => a.rowNumber - b.rowNumber),
+            invalidRowCount: this.build.invalidRowCount + rejected.size
+        };
+        this.serverCheck = { status: message ? 'failed' : 'done', checked, total: records.length, failed: rejected.size, message };
     }
 
     handleReviewBack() {

@@ -29,20 +29,31 @@ const FALLBACK_PAGE_SIZE = 25;
  *    Data Capture); without it the table just doesn't update live.
  *  - clipboardUtils behind a "Copy Ids" bulk action: the selected records' Ids
  *    go to the clipboard one per line, ready to paste into a report filter
+ *  - the account name as a link to its record (still editable inline), Industry
+ *    edited with a dropdown of its picklist values, and a View / Edit / Delete
+ *    menu on each row; deletes can be undone
+ *  - enable-mass-update ("Update field" on the selected rows), enable-export
+ *    (every matching row to CSV) and a totals row summing annual revenue
+ *  - c-aggregate-top-list ranking industries by revenue
+ *  - the import wizard's "Check against Salesforce" dry run. It runs triggers and
+ *    flows and rolls them back; leave it off where automation sends emails or
+ *    publishes events, which a rollback does not undo.
  */
 export default class EnterpriseDatatableDemo extends LightningElement {
     pageSize = FALLBACK_PAGE_SIZE;
     canBulkEdit = false;
 
     columns = [
-        { label: 'Account Name', fieldName: 'Name', type: 'text', editable: true, filterable: true },
-        { label: 'Industry', fieldName: 'Industry', type: 'text', editable: true, filterable: true },
+        { label: 'Account Name', fieldName: 'Name', type: 'text', editable: true, filterable: true, linkToRecord: true },
+        { label: 'Industry', fieldName: 'Industry', type: 'picklist', editable: true, filterable: true },
         { label: 'Phone', fieldName: 'Phone', type: 'phone', editable: true },
         { label: 'Owner', fieldName: 'Owner.Name', type: 'text' },
         { label: 'Annual Revenue', fieldName: 'AnnualRevenue', type: 'currency', editable: true }
     ];
 
     searchFields = ['Name', 'Industry'];
+
+    totals = [{ fieldName: 'AnnualRevenue', functionName: 'SUM' }];
 
     technologyFilters = [{ fieldName: 'Industry', operatorName: '=', value: 'Technology' }];
 

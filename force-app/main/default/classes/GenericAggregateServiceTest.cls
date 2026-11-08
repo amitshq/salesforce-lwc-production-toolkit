@@ -307,4 +307,167 @@ private class GenericAggregateServiceTest {
         System.assertNotEquals(null, message);
         System.assert(message.contains('Unknown object'), message);
     }
+
+    private static AggregateRequest byIndustry(List<AggregateSpec> aggregates) {
+        AggregateRequest request = new AggregateRequest('Account', aggregates);
+        request.groupByFields = new List<String>{ 'Industry' };
+        return request;
+    }
+
+    private static String summarizeError(AggregateRequest request) {
+        try {
+            GenericAggregateService.summarize(request);
+        } catch (AuraHandledException ex) {
+            return ex.getMessage();
+        }
+        return null;
+    }
+
+    @IsTest
+    static void ordersGroupsByAnAggregateForATopN() {
+        AggregateRequest request = byIndustry(new List<AggregateSpec>{ new AggregateSpec('SUM', 'AnnualRevenue', 'revenue') });
+        request.orderBy = 'revenue';
+        request.maxGroups = 1;
+
+        Test.startTest();
+        List<AggregateRow> rows = GenericAggregateService.summarize(request);
+        Test.stopTest();
+
+        System.assertEquals(1, rows.size(), 'Only the top group.');
+        System.assertEquals('Technology', rows[0].groups.get('Industry'), 'Ordering by an aggregate is descending by default.');
+        System.assertEquals(1000, num(rows[0].values.get('revenue')).intValue());
+    }
+
+    @IsTest
+    static void ordersByAnAggregateAscendingWhenAsked() {
+        AggregateRequest request = byIndustry(new List<AggregateSpec>{ new AggregateSpec('SUM', 'AnnualRevenue', 'revenue') });
+        request.orderBy = 'REVENUE';
+        request.orderDirection = 'asc';
+
+        List<AggregateRow> rows = GenericAggregateService.summarize(request);
+
+        System.assertEquals('Banking', rows[0].groups.get('Industry'), 'Aliases match whatever their case.');
+        System.assertEquals('Technology', rows[1].groups.get('Industry'));
+    }
+
+    @IsTest
+    static void ordersByAGroupFieldInEitherDirection() {
+        AggregateRequest request = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        request.orderBy = 'industry';
+        request.orderDirection = 'DESC';
+
+        List<AggregateRow> rows = GenericAggregateService.summarize(request);
+
+        System.assertEquals('Technology', rows[0].groups.get('Industry'));
+        System.assertEquals('Banking', rows[1].groups.get('Industry'));
+    }
+
+    @IsTest
+    static void havingKeepsOnlyTheGroupsThatMatch() {
+        AggregateRequest request = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        request.havingConditions = new List<AggregateCondition>{ new AggregateCondition('total', '>', 2) };
+
+        Test.startTest();
+        List<AggregateRow> rows = GenericAggregateService.summarize(request);
+        Test.stopTest();
+
+        System.assertEquals(1, rows.size());
+        System.assertEquals('Technology', rows[0].groups.get('Industry'));
+    }
+
+    @IsTest
+    static void havingAcceptsAWholeNumberWrittenAsADecimalOrText() {
+        AggregateRequest request = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        request.havingConditions = new List<AggregateCondition>{ new AggregateCondition('total', '>=', 2.0), new AggregateCondition('total', '<', '3') };
+
+        List<AggregateRow> rows = GenericAggregateService.summarize(request);
+
+        System.assertEquals(1, rows.size(), 'Banking has two accounts.');
+        System.assertEquals('Banking', rows[0].groups.get('Industry'));
+    }
+
+    @IsTest
+    static void havingComparesAnAverageAsADecimal() {
+        AggregateRequest request = byIndustry(new List<AggregateSpec>{ new AggregateSpec('AVG', 'AnnualRevenue', 'average') });
+        request.havingConditions = new List<AggregateCondition>{ new AggregateCondition('average', '>', 250.5) };
+
+        List<AggregateRow> rows = GenericAggregateService.summarize(request);
+
+        System.assertEquals(1, rows.size(), 'Technology averages 333.33; Banking 200.');
+        System.assertEquals('Technology', rows[0].groups.get('Industry'));
+    }
+
+    @IsTest
+    static void searchNarrowsTheRowsLikeTheDatatableSearch() {
+        AggregateRequest request = new AggregateRequest(
+            'Account',
+            new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total'), new AggregateSpec('SUM', 'AnnualRevenue', 'revenue') }
+        );
+        request.searchTerm = 'Agg Test 1';
+        request.searchFields = new List<String>{ 'Name' };
+
+        List<AggregateRow> rows = GenericAggregateService.summarize(request);
+
+        System.assertEquals(1, rows.size());
+        System.assertEquals(1, num(rows[0].values.get('total')).intValue());
+        System.assertEquals(200, num(rows[0].values.get('revenue')).intValue());
+    }
+
+    @IsTest
+    static void rejectsAFractionForACountCondition() {
+        AggregateRequest request = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        request.havingConditions = new List<AggregateCondition>{ new AggregateCondition('total', '>', 2.5) };
+
+        String message = summarizeError(request);
+
+        System.assert(message != null && message.contains('whole number'), message);
+    }
+
+    @IsTest
+    static void rejectsHavingWithoutGrouping() {
+        AggregateRequest request = new AggregateRequest('Account', new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        request.havingConditions = new List<AggregateCondition>{ new AggregateCondition('total', '>', 1) };
+
+        String message = summarizeError(request);
+
+        System.assert(message != null && message.contains('group-by'), message);
+    }
+
+    @IsTest
+    static void rejectsHavingConditionsThatNameNoAggregateOrUseAnUnknownOperator() {
+        AggregateRequest unknownAlias = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        unknownAlias.havingConditions = new List<AggregateCondition>{ new AggregateCondition('Name', '=', 'x') };
+        AggregateRequest unknownOperator = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        unknownOperator.havingConditions = new List<AggregateCondition>{ new AggregateCondition('total', 'LIKE', 1) };
+        AggregateRequest missingValue = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        missingValue.havingConditions = new List<AggregateCondition>{ new AggregateCondition('total', '>', null) };
+
+        String aliasMessage = summarizeError(unknownAlias);
+        String operatorMessage = summarizeError(unknownOperator);
+        String valueMessage = summarizeError(missingValue);
+
+        System.assert(aliasMessage != null && aliasMessage.contains('does not name'), aliasMessage);
+        System.assert(operatorMessage != null && operatorMessage.contains('Unsupported HAVING operator'), operatorMessage);
+        System.assert(valueMessage != null && valueMessage.contains('needs a value'), valueMessage);
+    }
+
+    @IsTest
+    static void rejectsOrderingByAFieldThatIsNotGroupedOrABadDirection() {
+        AggregateRequest notGrouped = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        notGrouped.orderBy = 'Name';
+        AggregateRequest badDirection = byIndustry(new List<AggregateSpec>{ new AggregateSpec('COUNT', null, 'total') });
+        badDirection.orderBy = 'total';
+        badDirection.orderDirection = 'SIDEWAYS';
+
+        String fieldMessage = summarizeError(notGrouped);
+        String directionMessage = summarizeError(badDirection);
+
+        System.assert(fieldMessage != null && fieldMessage.contains('Cannot order by'), fieldMessage);
+        System.assert(directionMessage != null && directionMessage.contains('ASC or DESC'), directionMessage);
+    }
+
+    @IsTest
+    static void rejectsAMissingRequest() {
+        System.assertNotEquals(null, summarizeError(null));
+    }
 }

@@ -71,6 +71,24 @@
                 </div>
             </template>
 
+            <template if:true={hasServerCheckResult}>
+                <p class={serverCheckClass} role="status">{serverCheckText}</p>
+            </template>
+            <template if:true={canCheckServer}>
+                <div class="slds-p-bottom_small">
+                    <lightning-button
+                        class="server-check-button"
+                        label={serverCheckButtonLabel}
+                        icon-name="utility:check"
+                        disabled={isCheckingServer}
+                        onclick={handleServerCheck}
+                    ></lightning-button>
+                    <p class="slds-text-body_small slds-text-color_weak slds-p-top_xx-small">
+                        Saves the rows and rolls them back, so validation rules and automation can flag problems before you import. Nothing is kept.
+                    </p>
+                </div>
+            </template>
+
             <template if:false={cannotImport}>
                 <p class="slds-text-title_bold slds-p-bottom_xx-small">Preview (first rows that will be imported)</p>
                 <div class="slds-scrollable_x">

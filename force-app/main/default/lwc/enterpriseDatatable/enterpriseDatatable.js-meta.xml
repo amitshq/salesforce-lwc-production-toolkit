@@ -27,6 +27,10 @@
             <property name="enableColumnChooser" type="Boolean" label="Enable Column Chooser" default="false" description="Let users hide and show columns." />
             <property name="viewKey" type="String" label="Saved Views Key" description="Set a key that is unique to this table (e.g. accounts-main) to turn on per-user saved views. Leave blank to turn them off." />
             <property name="autoRefresh" type="Boolean" label="Refresh When Records Change" default="false" description="Reload when records of this object change. Requires Change Data Capture to be enabled for the object in Setup." />
+            <property name="rowActions" type="String" label="Row Actions" description="Comma-separated: view, edit, delete. Leave blank for no row menu." />
+            <property name="enableMassUpdate" type="Boolean" label="Enable Mass Update" default="false" description="Let users set one field to one value on every selected row." />
+            <property name="enableExport" type="Boolean" label="Enable Export" default="false" description="Add a button that exports every matching row to CSV." />
+            <property name="deepPaging" type="Boolean" label="Page Past 2,000 Rows" default="false" description="Page with Apex pagination cursors, reaching 100,000 rows instead of 2,000." />
             <property name="hideRefreshButton" type="Boolean" label="Hide Refresh Button" default="false" />
         </targetConfig>
     </targetConfigs>

@@ -1,0 +1,73 @@
+<template>
+    <lightning-modal-header label="Update field"></lightning-modal-header>
+    <lightning-modal-body>
+        <lightning-combobox
+            class="field-input"
+            label="Field"
+            options={fieldOptions}
+            value={selectedFieldName}
+            onchange={handleFieldChange}
+        ></lightning-combobox>
+        <div class="slds-m-top_small">
+            <template lwc:if={isPicklist}>
+                <lightning-combobox
+                    class="value-input"
+                    label={valueLabel}
+                    placeholder="Select a value"
+                    options={picklistOptions}
+                    value={value}
+                    onchange={handleValueChange}
+                ></lightning-combobox>
+            </template>
+            <template lwc:elseif={isLookup}>
+                <lightning-record-picker
+                    class="value-input"
+                    label={valueLabel}
+                    object-api-name={selectedField.objectApiName}
+                    value={value}
+                    onchange={handleLookupChange}
+                ></lightning-record-picker>
+            </template>
+            <template lwc:elseif={isCheckbox}>
+                <lightning-input
+                    class="value-input"
+                    type="checkbox"
+                    label={valueLabel}
+                    checked={checked}
+                    onchange={handleCheckboxChange}
+                ></lightning-input>
+            </template>
+            <template lwc:elseif={isRichText}>
+                <lightning-input-rich-text
+                    class="value-input"
+                    label={valueLabel}
+                    label-visible
+                    value={value}
+                    onchange={handleValueChange}
+                ></lightning-input-rich-text>
+            </template>
+            <template lwc:else>
+                <lightning-input
+                    class="value-input"
+                    type={inputType}
+                    formatter={inputFormatter}
+                    step={inputStep}
+                    label={valueLabel}
+                    value={value}
+                    onchange={handleValueChange}
+                ></lightning-input>
+            </template>
+        </div>
+        <p class="summary slds-m-top_small slds-text-color_weak" aria-live="polite">{summary}</p>
+    </lightning-modal-body>
+    <lightning-modal-footer>
+        <lightning-button class="cancel-button" label="Cancel" onclick={handleCancel}></lightning-button>
+        <lightning-button
+            class="apply-button slds-m-left_x-small"
+            label={applyLabel}
+            variant={applyVariant}
+            disabled={cannotApply}
+            onclick={handleApply}
+        ></lightning-button>
+    </lightning-modal-footer>
+</template>

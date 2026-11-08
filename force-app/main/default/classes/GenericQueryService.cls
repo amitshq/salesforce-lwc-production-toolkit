@@ -18,6 +18,8 @@
 public with sharing class GenericQueryService {
     private static final Set<String> SORT_DIRECTIONS = new Set<String>{ 'ASC', 'DESC' };
     private static final Integer MAX_PAGE_SIZE = 200;
+    // queryBatch serves exports, which want as few round trips as a response can carry.
+    private static final Integer MAX_BATCH_SIZE = 2000;
 
     public class QueryServiceException extends Exception {
     }
@@ -35,27 +37,7 @@ public with sharing class GenericQueryService {
         Integer pageSize
     ) {
         try {
-            Schema.DescribeSObjectResult objectDescribe = describeObject(objectApiName);
-            Map<String, Schema.SObjectField> fieldMap = objectDescribe.fields.getMap();
-
-            List<String> safeFields = allowListFields(fields, fieldMap);
-            if (safeFields.isEmpty()) {
-                safeFields.add('Id');
-            }
-            if (!safeFields.contains('Id')) {
-                safeFields.add(0, 'Id');
-            }
-
-            Map<String, Object> binds = new Map<String, Object>();
-            List<String> whereClauses = buildFilterClauses(filters, fieldMap, binds);
-            appendSearchClause(whereClauses, binds, searchTerm, searchFields, fieldMap);
-
-            String whereClause = whereClauses.isEmpty() ? '' : ' WHERE ' + String.join(whereClauses, ' AND ');
-
-            String safeSortField = allowListSingleField(sortField, fieldMap);
-            String sortDirectionUpper = String.isBlank(sortDirection) ? '' : sortDirection.toUpperCase();
-            String safeSortDirection = SORT_DIRECTIONS.contains(sortDirectionUpper) ? sortDirectionUpper : 'ASC';
-            String orderByClause = buildOrderBy(safeSortField, safeSortDirection);
+            QueryPlan queryPlan = plan(objectApiName, fields, filters, sortField, sortDirection, searchTerm, searchFields);
 
             Integer safePageSize = normalizePageSize(pageSize);
             Integer safePageNumber = (pageNumber == null || pageNumber < 1) ? 1 : pageNumber;
@@ -67,21 +49,16 @@ public with sharing class GenericQueryService {
                 );
             }
 
-            String baseQuery = 'FROM ' + objectDescribe.getName() + whereClause;
-            String countQuery = 'SELECT COUNT() ' + baseQuery;
-            Integer totalCount = Database.countQueryWithBinds(countQuery, binds, AccessLevel.USER_MODE);
+            Integer totalCount = Database.countQueryWithBinds(queryPlan.countQuery(), queryPlan.binds, AccessLevel.USER_MODE);
 
-            String selectQuery =
-                'SELECT ' +
-                String.join(safeFields, ', ') +
-                ' ' +
-                baseQuery +
-                orderByClause +
-                ' LIMIT :limitSize OFFSET :offsetSize';
+            Map<String, Object> binds = queryPlan.binds.clone();
             binds.put('limitSize', safePageSize);
             binds.put('offsetSize', offset);
-
-            List<SObject> records = Database.queryWithBinds(selectQuery, binds, AccessLevel.USER_MODE);
+            List<SObject> records = Database.queryWithBinds(
+                queryPlan.selectQuery() + ' LIMIT :limitSize OFFSET :offsetSize',
+                binds,
+                AccessLevel.USER_MODE
+            );
 
             return new QueryResult(records, totalCount, safePageNumber, safePageSize);
         } catch (QueryServiceException qse) {
@@ -89,6 +66,61 @@ public with sharing class GenericQueryService {
         } catch (Exception e) {
             throw toAuraException('Unable to run query: ' + e.getMessage());
         }
+    }
+
+    /**
+     * A validated query, before paging is applied: every identifier in it has passed the
+     * describe allow-list and every value is in `binds`. CursorPagingService pages the same
+     * plan with a pagination cursor instead of OFFSET.
+     */
+    public class QueryPlan {
+        public String objectName;
+        public List<String> fields;
+        public String whereClause;
+        public String orderByClause;
+        public Map<String, Object> binds;
+
+        public String countQuery() {
+            return 'SELECT COUNT() FROM ' + objectName + whereClause;
+        }
+
+        public String selectQuery() {
+            return 'SELECT ' + String.join(fields, ', ') + ' FROM ' + objectName + whereClause + orderByClause;
+        }
+    }
+
+    public static QueryPlan plan(
+        String objectApiName,
+        List<String> fields,
+        List<QueryFilter> filters,
+        String sortField,
+        String sortDirection,
+        String searchTerm,
+        List<String> searchFields
+    ) {
+        Schema.DescribeSObjectResult objectDescribe = describeObject(objectApiName);
+        Map<String, Schema.SObjectField> fieldMap = objectDescribe.fields.getMap();
+
+        List<String> safeFields = allowListFields(fields, fieldMap);
+        if (!safeFields.contains('Id')) {
+            safeFields.add(0, 'Id');
+        }
+
+        Map<String, Object> binds = new Map<String, Object>();
+        List<String> whereClauses = buildFilterClauses(filters, fieldMap, binds);
+        appendSearchClause(whereClauses, binds, searchTerm, searchFields, fieldMap);
+
+        String safeSortField = allowListSingleField(sortField, fieldMap);
+        String sortDirectionUpper = String.isBlank(sortDirection) ? '' : sortDirection.toUpperCase();
+        String safeSortDirection = SORT_DIRECTIONS.contains(sortDirectionUpper) ? sortDirectionUpper : 'ASC';
+
+        QueryPlan queryPlan = new QueryPlan();
+        queryPlan.objectName = objectDescribe.getName();
+        queryPlan.fields = safeFields;
+        queryPlan.whereClause = whereClauses.isEmpty() ? '' : ' WHERE ' + String.join(whereClauses, ' AND ');
+        queryPlan.orderByClause = buildOrderBy(safeSortField, safeSortDirection);
+        queryPlan.binds = binds;
+        return queryPlan;
     }
 
     /**
@@ -142,45 +174,7 @@ public with sharing class GenericQueryService {
         Integer pageSize
     ) {
         try {
-            Schema.DescribeSObjectResult objectDescribe = describeObject(objectApiName);
-            Map<String, Schema.SObjectField> fieldMap = objectDescribe.fields.getMap();
-
-            List<String> safeFields = allowListFields(fields, fieldMap);
-            if (!safeFields.contains('Id')) {
-                safeFields.add(0, 'Id');
-            }
-
-            Map<String, Object> binds = new Map<String, Object>();
-            List<String> whereClauses = buildFilterClauses(filters, fieldMap, binds);
-            appendSearchClause(whereClauses, binds, searchTerm, searchFields, fieldMap);
-
-            if (String.isNotBlank(afterId)) {
-                binds.put('afterId', afterId);
-                whereClauses.add('Id > :afterId');
-            }
-            String whereClause = whereClauses.isEmpty() ? '' : ' WHERE ' + String.join(whereClauses, ' AND ');
-
-            Integer safePageSize = normalizePageSize(pageSize);
-            // Fetch one extra row past the page size purely to learn whether a next page exists.
-            binds.put('limitSize', safePageSize + 1);
-
-            String selectQuery =
-                'SELECT ' +
-                String.join(safeFields, ', ') +
-                ' FROM ' +
-                objectDescribe.getName() +
-                whereClause +
-                ' ORDER BY Id ASC LIMIT :limitSize';
-
-            List<SObject> records = Database.queryWithBinds(selectQuery, binds, AccessLevel.USER_MODE);
-
-            Boolean hasMore = records.size() > safePageSize;
-            if (hasMore) {
-                records.remove(records.size() - 1);
-            }
-            String nextCursor = (hasMore && !records.isEmpty()) ? String.valueOf(records[records.size() - 1].get('Id')) : null;
-
-            return new CursorQueryResult(records, hasMore, nextCursor);
+            return fetchAfter(objectApiName, fields, filters, searchTerm, searchFields, afterId, normalizePageSize(pageSize));
         } catch (QueryServiceException qse) {
             throw toAuraException(qse.getMessage());
         } catch (Exception e) {
@@ -188,7 +182,82 @@ public with sharing class GenericQueryService {
         }
     }
 
-    private static void appendSearchClause(
+    /**
+     * The same keyset walk as queryWithCursor, for reading every matching row (an export):
+     * up to 2,000 rows a call instead of 200, and not cacheable, so a second export straight
+     * after an edit cannot be served a stale copy from the browser's cache.
+     */
+    @AuraEnabled
+    public static CursorQueryResult queryBatch(
+        String objectApiName,
+        List<String> fields,
+        List<QueryFilter> filters,
+        String searchTerm,
+        List<String> searchFields,
+        String afterId,
+        Integer batchSize
+    ) {
+        try {
+            Integer safeBatchSize = (batchSize == null || batchSize < 1) ? MAX_PAGE_SIZE : Math.min(batchSize, MAX_BATCH_SIZE);
+            return fetchAfter(objectApiName, fields, filters, searchTerm, searchFields, afterId, safeBatchSize);
+        } catch (QueryServiceException qse) {
+            throw toAuraException(qse.getMessage());
+        } catch (Exception e) {
+            throw toAuraException('Unable to run query: ' + e.getMessage());
+        }
+    }
+
+    private static CursorQueryResult fetchAfter(
+        String objectApiName,
+        List<String> fields,
+        List<QueryFilter> filters,
+        String searchTerm,
+        List<String> searchFields,
+        String afterId,
+        Integer safePageSize
+    ) {
+        Schema.DescribeSObjectResult objectDescribe = describeObject(objectApiName);
+        Map<String, Schema.SObjectField> fieldMap = objectDescribe.fields.getMap();
+
+        List<String> safeFields = allowListFields(fields, fieldMap);
+        if (!safeFields.contains('Id')) {
+            safeFields.add(0, 'Id');
+        }
+
+        Map<String, Object> binds = new Map<String, Object>();
+        List<String> whereClauses = buildFilterClauses(filters, fieldMap, binds);
+        appendSearchClause(whereClauses, binds, searchTerm, searchFields, fieldMap);
+
+        if (String.isNotBlank(afterId)) {
+            binds.put('afterId', afterId);
+            whereClauses.add('Id > :afterId');
+        }
+        String whereClause = whereClauses.isEmpty() ? '' : ' WHERE ' + String.join(whereClauses, ' AND ');
+
+        // Fetch one extra row past the page size purely to learn whether a next page exists.
+        binds.put('limitSize', safePageSize + 1);
+
+        String selectQuery =
+            'SELECT ' +
+            String.join(safeFields, ', ') +
+            ' FROM ' +
+            objectDescribe.getName() +
+            whereClause +
+            ' ORDER BY Id ASC LIMIT :limitSize';
+
+        List<SObject> records = Database.queryWithBinds(selectQuery, binds, AccessLevel.USER_MODE);
+
+        Boolean hasMore = records.size() > safePageSize;
+        if (hasMore) {
+            records.remove(records.size() - 1);
+        }
+        String nextCursor = (hasMore && !records.isEmpty()) ? String.valueOf(records[records.size() - 1].get('Id')) : null;
+
+        return new CursorQueryResult(records, hasMore, nextCursor);
+    }
+
+    // Shared with GenericAggregateService, so a totals row matches what the table's search shows.
+    public static void appendSearchClause(
         List<String> whereClauses,
         Map<String, Object> binds,
         String searchTerm,
@@ -339,7 +408,7 @@ public with sharing class GenericQueryService {
         return clauses;
     }
 
-    private static Integer normalizePageSize(Integer requested) {
+    public static Integer normalizePageSize(Integer requested) {
         if (requested == null || requested < 1) {
             return 25;
         }

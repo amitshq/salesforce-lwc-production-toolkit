@@ -1,9 +1,11 @@
 import { createElement } from 'lwc';
 import CsvImportWizard from 'c/csvImportWizard';
 import saveRecords from '@salesforce/apex/GenericDmlService.saveRecords';
+import validateRecords from '@salesforce/apex/GenericDmlService.validateRecords';
 import { exportRowsToCsv } from 'c/csvUtils';
 
 jest.mock('@salesforce/apex/GenericDmlService.saveRecords', () => ({ default: jest.fn() }), { virtual: true });
+jest.mock('@salesforce/apex/GenericDmlService.validateRecords', () => ({ default: jest.fn() }), { virtual: true });
 jest.mock('c/csvUtils', () => ({
     ...jest.requireActual('c/csvUtils'),
     exportRowsToCsv: jest.fn()
@@ -296,6 +298,118 @@ describe('c-csv-import-wizard', () => {
             const fileInput = element.shadowRoot.querySelector('lightning-input');
             expect(fileInput).not.toBeNull();
             expect(fileInput.type).toBe('file');
+        });
+    });
+
+    describe('checking against Salesforce before importing', () => {
+        const FOUR_ROWS = 'Account Name,Annual Revenue\nAcme,1000\nGlobex,oops\nInitech,5\nHooli,7';
+
+        async function toReview(element, csv = FOUR_ROWS) {
+            await upload(element, csv);
+            button(element, 'Next').click();
+            await waitFor(() => Array.from(element.shadowRoot.querySelectorAll('lightning-button')).some((b) => b.label.startsWith('Import ')), 'the review step');
+        }
+
+        function passAllBut(rowKeys, message = 'Duplicate account') {
+            validateRecords.mockImplementation(({ records }) =>
+                Promise.resolve(
+                    records.map((record) => {
+                        if (rowKeys.includes(record.rowKey)) {
+                            return { rowKey: record.rowKey, success: false, message, fieldNames: ['Name'] };
+                        }
+                        return { rowKey: record.rowKey, success: true };
+                    })
+                )
+            );
+        }
+
+        it('is not offered unless switched on', async () => {
+            const element = createWizard();
+            await toReview(element);
+
+            expect(button(element, 'Check against Salesforce')).toBeUndefined();
+        });
+
+        it('checks the rows chunk by chunk and skips the ones Salesforce would reject', async () => {
+            passAllBut(['4']);
+            const element = createWizard({ enableServerCheck: true, chunkSize: 2 });
+            await toReview(element);
+
+            button(element, 'Check against Salesforce').click();
+            await waitFor(() => button(element, 'Import 2 rows'), 'the check to finish');
+
+            expect(validateRecords.mock.calls.map((call) => call[0].records.map((record) => record.rowKey))).toEqual([['2', '4'], ['5']]);
+            expect(validateRecords.mock.calls[0][0]).toEqual({
+                objectApiName: 'Account',
+                records: [
+                    { rowKey: '2', fields: { Name: 'Acme', AnnualRevenue: 1000 } },
+                    { rowKey: '4', fields: { Name: 'Initech', AnnualRevenue: 5 } }
+                ]
+            });
+            expect(text(element)).toContain('Checked 3 rows against Salesforce: 2 would import, 1 would fail and will be skipped');
+            expect(text(element)).toContain('Row 3 (Annual Revenue): "oops" is not a valid number.');
+            expect(text(element)).toContain('Row 4 (Name): Duplicate account');
+            expect(text(element)).toContain('2 with problems (will be skipped)');
+            expect(button(element, 'Check against Salesforce')).toBeUndefined();
+        });
+
+        it('imports only the rows that passed', async () => {
+            passAllBut(['4']);
+            saveRecords.mockImplementation(({ records }) => Promise.resolve(records.map((record) => ({ rowKey: record.rowKey, success: true }))));
+            const element = createWizard({ enableServerCheck: true });
+            await toReview(element);
+            button(element, 'Check against Salesforce').click();
+            await waitFor(() => button(element, 'Import 2 rows'), 'the check to finish');
+
+            button(element, 'Import 2 rows').click();
+            await waitFor(() => text(element).includes('rows imported'), 'the import to finish');
+
+            expect(saveRecords.mock.calls[0][0].records.map((record) => record.rowKey)).toEqual(['2', '5']);
+            expect(text(element)).toContain('2 rows skipped because of problems found before import.');
+        });
+
+        it('says when every row would import', async () => {
+            passAllBut([]);
+            const element = createWizard({ enableServerCheck: true });
+            await toReview(element);
+
+            button(element, 'Check against Salesforce').click();
+            await waitFor(() => text(element).includes('all would import'), 'the check to finish');
+
+            expect(text(element)).toContain('Checked 3 rows against Salesforce: all would import.');
+            expect(button(element, 'Import 3 rows')).not.toBeUndefined();
+        });
+
+        it('keeps what it learned when a chunk cannot be checked, and offers to try again', async () => {
+            validateRecords
+                .mockImplementationOnce(({ records }) =>
+                    Promise.resolve([{ rowKey: records[0].rowKey, success: false, message: 'Required field missing' }, { rowKey: records[1].rowKey, success: true }])
+                )
+                .mockRejectedValueOnce({ body: { message: 'Apex CPU time limit exceeded' } });
+            const element = createWizard({ enableServerCheck: true, chunkSize: 2 });
+            await toReview(element);
+
+            button(element, 'Check against Salesforce').click();
+            await waitFor(() => button(element, 'Check again'), 'the check to stop');
+
+            expect(text(element)).toContain('The check stopped after 2 of 3 rows: Apex CPU time limit exceeded');
+            expect(button(element, 'Import 2 rows')).not.toBeUndefined();
+        });
+
+        it('starts over when the mapping is changed', async () => {
+            passAllBut(['4']);
+            const element = createWizard({ enableServerCheck: true });
+            await toReview(element);
+            button(element, 'Check against Salesforce').click();
+            await waitFor(() => button(element, 'Import 2 rows'), 'the check to finish');
+
+            button(element, 'Back').click();
+            await waitFor(() => button(element, 'Next'), 'the mapping step');
+            button(element, 'Next').click();
+            await waitFor(() => button(element, 'Import 3 rows'), 'the review step');
+
+            expect(button(element, 'Check against Salesforce')).not.toBeUndefined();
+            expect(text(element)).not.toContain('Checked 3 rows');
         });
     });
 });

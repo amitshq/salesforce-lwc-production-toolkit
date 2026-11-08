@@ -288,4 +288,52 @@ private class GenericQueryServiceTest {
         System.assertEquals(false, lastPage.hasMore);
         System.assertEquals(null, lastPage.nextCursor);
     }
+
+    @IsTest
+    static void batchesWalkEveryMatchingRowByIdForAnExport() {
+        List<QueryFilter> filters = new List<QueryFilter>{ new QueryFilter('Industry', '=', 'Technology') };
+
+        Test.startTest();
+        CursorQueryResult first = GenericQueryService.queryBatch('Account', new List<String>{ 'Name' }, filters, null, null, null, 2);
+        CursorQueryResult rest = GenericQueryService.queryBatch('Account', new List<String>{ 'Name' }, filters, null, null, first.nextCursor, 2);
+        Test.stopTest();
+
+        System.assertEquals(2, first.records.size());
+        System.assertEquals(true, first.hasMore);
+        System.assertEquals(1, rest.records.size(), 'Three Technology accounts in all.');
+        System.assertEquals(false, rest.hasMore);
+    }
+
+    @IsTest
+    static void batchesAcceptMoreRowsThanAPageAndDefaultWhenUnset() {
+        Test.startTest();
+        CursorQueryResult large = GenericQueryService.queryBatch('Account', new List<String>{ 'Name' }, null, null, null, null, 5000);
+        CursorQueryResult unset = GenericQueryService.queryBatch('Account', new List<String>{ 'Name' }, null, null, null, null, null);
+        Test.stopTest();
+
+        System.assertEquals(5, large.records.size(), 'A batch over the 2,000 cap is clamped, not refused.');
+        System.assertEquals(false, large.hasMore);
+        System.assertEquals(5, unset.records.size());
+    }
+
+    @IsTest
+    static void aPlanHoldsOnlyValidatedIdentifiersAndBoundValues() {
+        GenericQueryService.QueryPlan queryPlan = GenericQueryService.plan(
+            'account',
+            new List<String>{ 'Name', 'NotAField__c' },
+            new List<QueryFilter>{ new QueryFilter('Industry', '=', 'Technology') },
+            'Name',
+            'desc',
+            'Test',
+            new List<String>{ 'Name' }
+        );
+
+        System.assertEquals('SELECT COUNT() FROM Account WHERE Industry = :f0 AND (Name LIKE :searchTerm)', queryPlan.countQuery());
+        System.assertEquals(
+            'SELECT Id, Name FROM Account WHERE Industry = :f0 AND (Name LIKE :searchTerm) ORDER BY Name DESC NULLS LAST, Id ASC',
+            queryPlan.selectQuery()
+        );
+        System.assertEquals('Technology', queryPlan.binds.get('f0'));
+        System.assertEquals('%Test%', queryPlan.binds.get('searchTerm'));
+    }
 }

@@ -13,15 +13,22 @@
     {
       id: 'tables',
       label: 'Show records in a table',
-      blurb: 'A server-side table with paging, sorting, filters, inline edit, saved views and bulk actions.',
+      blurb: 'A server-side table with paging past 2,000 rows, filters, inline edit with picklist and lookup editors, mass update, export, totals, undo and saved views.',
       ids: [
         'enterprise-datatable',
+        'extended-datatable',
+        'mass-update-dialog',
         'column-chooser',
         'datatable-view-bar',
         'pagination',
         'infinite-scroll-loader',
         'bulk-action-bar',
+        'datatable-lookup-cell',
+        'datatable-lookup-editor',
+        'datatable-rich-text-editor',
+        'datatable-helpers',
         'generic-query-service',
+        'cursor-paging-service-apex',
         'generic-dml-service',
         'saved-view-service-apex'
       ]
@@ -35,8 +42,8 @@
     {
       id: 'numbers',
       label: 'Show numbers and KPIs',
-      blurb: 'KPI tiles and aggregates (count, sum, average, min, max) computed on the server.',
-      ids: ['aggregate-kpi-card', 'kpi-card', 'generic-aggregate-service', 'date-range-picker']
+      blurb: 'KPI tiles, top-N rankings and aggregates (count, sum, average, min, max, with HAVING) computed on the server.',
+      ids: ['aggregate-kpi-card', 'aggregate-top-list', 'kpi-card', 'generic-aggregate-service', 'date-range-picker']
     },
     {
       id: 'forms',

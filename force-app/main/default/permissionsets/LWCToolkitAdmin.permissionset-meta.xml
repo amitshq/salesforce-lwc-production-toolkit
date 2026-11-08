@@ -12,6 +12,10 @@
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
+        <apexClass>CursorPagingService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
         <apexClass>GenericDmlService</apexClass>
         <enabled>true</enabled>
     </classAccesses>

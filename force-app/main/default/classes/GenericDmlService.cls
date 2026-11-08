@@ -110,30 +110,8 @@ public with sharing class GenericDmlService {
         List<DmlResult> results = new List<DmlResult>();
         try {
             Schema.SObjectType sObjectType = describeObjectType(objectApiName);
-            if (recordIds == null || recordIds.isEmpty()) {
-                return results;
-            }
-
-            List<Id> ids = new List<Id>();
             List<String> validRowKeys = new List<String>();
-            for (String recordId : recordIds) {
-                Id castId;
-                try {
-                    castId = (Id) recordId;
-                } catch (Exception castError) {
-                    results.add(new DmlResult(recordId, null, false, 'Invalid record Id: ' + recordId, null));
-                    continue;
-                }
-                // Delete only what the caller said it was deleting: an Id of another object is refused, not deleted.
-                if (castId.getSObjectType() != sObjectType) {
-                    results.add(
-                        new DmlResult(recordId, null, false, 'Not a ' + sObjectType.getDescribe().getLabel() + ' record: ' + recordId, null)
-                    );
-                    continue;
-                }
-                ids.add(castId);
-                validRowKeys.add(recordId);
-            }
+            List<Id> ids = castIdsOfType(sObjectType, recordIds, validRowKeys, results);
             if (ids.isEmpty()) {
                 return results;
             }
@@ -141,16 +119,7 @@ public with sharing class GenericDmlService {
             List<Database.DeleteResult> deleteResults = Database.delete(ids, false, AccessLevel.USER_MODE);
             for (Integer i = 0; i < deleteResults.size(); i++) {
                 Database.DeleteResult deleteResult = deleteResults[i];
-                String rowKey = validRowKeys[i];
-                if (deleteResult.isSuccess()) {
-                    results.add(new DmlResult(rowKey, deleteResult.getId(), true, null, null));
-                } else {
-                    List<String> messages = new List<String>();
-                    for (Database.Error dmlError : deleteResult.getErrors()) {
-                        messages.add(dmlError.getMessage());
-                    }
-                    results.add(new DmlResult(rowKey, null, false, String.join(messages, ' '), null));
-                }
+                results.add(toResult(validRowKeys[i], deleteResult.isSuccess(), deleteResult.getId(), deleteResult.getErrors()));
             }
             return results;
         } catch (DmlServiceException dse) {
@@ -158,6 +127,107 @@ public with sharing class GenericDmlService {
         } catch (Exception e) {
             throw new AuraHandledException('Unable to delete records: ' + e.getMessage());
         }
+    }
+
+    /**
+     * Brings deleted records back from the Recycle Bin: the "Undo" after a delete in
+     * c-enterprise-datatable. Same contract as deleteRecords - one DmlResult per Id, Ids of
+     * another object refused - and it runs in user mode, so it restores only what the user
+     * could delete. A record that has been emptied from the Recycle Bin cannot come back and
+     * is reported as a failed row.
+     */
+    @AuraEnabled
+    public static List<DmlResult> undeleteRecords(String objectApiName, List<String> recordIds) {
+        List<DmlResult> results = new List<DmlResult>();
+        try {
+            Schema.SObjectType sObjectType = describeObjectType(objectApiName);
+            List<String> validRowKeys = new List<String>();
+            List<Id> ids = castIdsOfType(sObjectType, recordIds, validRowKeys, results);
+            if (ids.isEmpty()) {
+                return results;
+            }
+
+            List<Database.UndeleteResult> undeleteResults = Database.undelete(ids, false, AccessLevel.USER_MODE);
+            for (Integer i = 0; i < undeleteResults.size(); i++) {
+                Database.UndeleteResult undeleteResult = undeleteResults[i];
+                results.add(toResult(validRowKeys[i], undeleteResult.isSuccess(), undeleteResult.getId(), undeleteResult.getErrors()));
+            }
+            return results;
+        } catch (DmlServiceException dse) {
+            throw new AuraHandledException(dse.getMessage());
+        } catch (Exception e) {
+            throw new AuraHandledException('Unable to restore records: ' + e.getMessage());
+        }
+    }
+
+    /**
+     * A dry run of saveRecords: the rows are saved - so validation rules, required fields,
+     * duplicate rules, triggers and flows all run - and then everything is rolled back. The
+     * results say which rows would fail and why; recordId is always null, since nothing was
+     * kept. c-csv-import-wizard uses it to check a file before importing it.
+     *
+     * Only database work is rolled back. Automation with effects outside the database
+     * (platform events published immediately, emails, callouts made later from queued
+     * jobs) may still act, so do not offer a dry run on objects whose automation does that.
+     * A row that passes can still fail at import: data can change in between, and rows of
+     * different chunks are checked separately (a duplicate split across two chunks passes).
+     */
+    @AuraEnabled
+    public static List<DmlResult> validateRecords(String objectApiName, List<DmlRecordInput> records) {
+        Savepoint beforeCheck = Database.setSavepoint();
+        try {
+            List<DmlResult> results = saveRecords(objectApiName, records);
+            for (DmlResult result : results) {
+                result.recordId = null;
+                result.modstamp = null;
+            }
+            return results;
+        } finally {
+            Database.rollback(beforeCheck);
+        }
+    }
+
+    /**
+     * Casts each Id and keeps only those of the expected object - delete or restore only what
+     * the caller said it was acting on. Anything else becomes a failed result straight away.
+     */
+    private static List<Id> castIdsOfType(
+        Schema.SObjectType sObjectType,
+        List<String> recordIds,
+        List<String> validRowKeys,
+        List<DmlResult> results
+    ) {
+        List<Id> ids = new List<Id>();
+        if (recordIds == null) {
+            return ids;
+        }
+        for (String recordId : recordIds) {
+            Id castId;
+            try {
+                castId = (Id) recordId;
+            } catch (Exception castError) {
+                results.add(new DmlResult(recordId, null, false, 'Invalid record Id: ' + recordId, null));
+                continue;
+            }
+            if (castId.getSObjectType() != sObjectType) {
+                results.add(new DmlResult(recordId, null, false, 'Not a ' + sObjectType.getDescribe().getLabel() + ' record: ' + recordId, null));
+                continue;
+            }
+            ids.add(castId);
+            validRowKeys.add(recordId);
+        }
+        return ids;
+    }
+
+    private static DmlResult toResult(String rowKey, Boolean success, Id recordId, List<Database.Error> errors) {
+        if (success) {
+            return new DmlResult(rowKey, recordId, true, null, null);
+        }
+        List<String> messages = new List<String>();
+        for (Database.Error dmlError : errors) {
+            messages.add(dmlError.getMessage());
+        }
+        return new DmlResult(rowKey, null, false, String.join(messages, ' '), null);
     }
 
     /**
