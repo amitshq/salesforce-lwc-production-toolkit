@@ -1,56 +1,108 @@
 name: Apex tests (scratch org)
 
-# Opt-in. Apex can only be tested inside a Salesforce org, so this needs a Dev
-# Hub login. To enable it, add the repository secret DEVHUB_SFDX_AUTH_URL (the
-# output of `sf org display --verbose --target-org <devhub>`, "Sfdx Auth Url"
-# line) and set the repository variable APEX_CI_ENABLED to "true".
+# Deploys the project to a fresh scratch org, runs every Apex test, and fails if coverage is
+# under COVERAGE_MINIMUM. Apex can only run inside an org, so this needs a Dev Hub login.
 #
-# It only runs on pushes to dev and manual runs - never for pull requests from
-# forks, which cannot see secrets.
+# It stays off until you set it up (RELEASING.md walks through it):
+#   1. Repository variable APEX_CI_ENABLED = true
+#   2. Dev Hub credentials, either
+#      - JWT (recommended, no long-lived token): secrets SF_CLIENT_ID (connected app consumer
+#        key), SF_JWT_KEY (the app's private key, PEM) and SF_DEVHUB_USERNAME (the user the
+#        app is pre-authorised for), or
+#      - an SFDX auth URL: secret DEVHUB_SFDX_AUTH_URL
+#
+# It runs on pushes to dev, on manual runs, and on pull requests to dev once a maintainer adds
+# the "run-apex" label. Pull requests from forks never get secrets, so they are skipped.
+# (There is no nightly run on purpose: scheduled runs use the default branch, main, and a
+# Developer Edition Dev Hub allows only a handful of scratch orgs a day.)
 on:
   workflow_dispatch:
   push:
     branches: [dev]
+  pull_request:
+    branches: [dev]
+    types: [labeled, synchronize, reopened]
 
 permissions:
   contents: read
 
+concurrency:
+  group: apex-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COVERAGE_MINIMUM: 85
+  # Major version pinned; move it on deliberately.
+  SF_CLI_VERSION: '2'
+
 jobs:
   apex:
     name: Deploy and run Apex tests
-    if: ${{ vars.APEX_CI_ENABLED == 'true' }}
+    if: >-
+      vars.APEX_CI_ENABLED == 'true' &&
+      (github.event_name != 'pull_request' ||
+       (contains(github.event.pull_request.labels.*.name, 'run-apex') &&
+        github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Salesforce CLI
-        run: npm install --global @salesforce/cli
+        run: npm install --global "@salesforce/cli@${SF_CLI_VERSION}"
 
       - name: Authenticate Dev Hub
         env:
+          SF_CLIENT_ID: ${{ secrets.SF_CLIENT_ID }}
+          SF_JWT_KEY: ${{ secrets.SF_JWT_KEY }}
+          SF_DEVHUB_USERNAME: ${{ secrets.SF_DEVHUB_USERNAME }}
           DEVHUB_SFDX_AUTH_URL: ${{ secrets.DEVHUB_SFDX_AUTH_URL }}
         run: |
-          printf '%s' "$DEVHUB_SFDX_AUTH_URL" > "$RUNNER_TEMP/devhub.sfdx"
-          sf org login sfdx-url --sfdx-url-file "$RUNNER_TEMP/devhub.sfdx" --alias devhub --set-default-dev-hub
-          rm -f "$RUNNER_TEMP/devhub.sfdx"
+          set -euo pipefail
+          if [ -n "$SF_JWT_KEY" ] && [ -n "$SF_CLIENT_ID" ] && [ -n "$SF_DEVHUB_USERNAME" ]; then
+            printf '%s\n' "$SF_JWT_KEY" > "$RUNNER_TEMP/server.key"
+            sf org login jwt --client-id "$SF_CLIENT_ID" --jwt-key-file "$RUNNER_TEMP/server.key" \
+              --username "$SF_DEVHUB_USERNAME" --alias devhub --set-default-dev-hub
+            rm -f "$RUNNER_TEMP/server.key"
+          elif [ -n "$DEVHUB_SFDX_AUTH_URL" ]; then
+            printf '%s' "$DEVHUB_SFDX_AUTH_URL" > "$RUNNER_TEMP/devhub.sfdx"
+            sf org login sfdx-url --sfdx-url-file "$RUNNER_TEMP/devhub.sfdx" --alias devhub --set-default-dev-hub
+            rm -f "$RUNNER_TEMP/devhub.sfdx"
+          else
+            echo "::error::No Dev Hub credentials. Set SF_CLIENT_ID, SF_JWT_KEY and SF_DEVHUB_USERNAME (or DEVHUB_SFDX_AUTH_URL); see RELEASING.md."
+            exit 1
+          fi
 
       - name: Create scratch org
         run: sf org create scratch --definition-file config/project-scratch-def.json --alias ci-scratch --duration-days 1 --set-default --wait 15
 
       - name: Deploy source
-        run: sf project deploy start --target-org ci-scratch --wait 20
+        run: sf project deploy start --target-org ci-scratch --wait 30
 
       - name: Assign permission set
         run: sf org assign permset --name LWCToolkitAdmin --target-org ci-scratch
 
       - name: Run Apex tests
-        run: sf apex run test --target-org ci-scratch --test-level RunLocalTests --code-coverage --result-format human --wait 20
+        run: |
+          mkdir -p test-results
+          sf apex run test --target-org ci-scratch --test-level RunLocalTests --code-coverage \
+            --result-format junit --output-dir test-results --wait 30
+
+      - name: Check coverage
+        run: node scripts/check-apex-coverage.js test-results "$COVERAGE_MINIMUM"
+
+      - name: Keep the test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apex-test-results
+          path: test-results
+          if-no-files-found: ignore
 
       - name: Delete scratch org
         if: always()
-        run: sf org delete scratch --target-org ci-scratch --no-prompt
+        run: sf org delete scratch --target-org ci-scratch --no-prompt || true

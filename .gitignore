@@ -6,3 +6,7 @@ node_modules/
 coverage/
 *.log
 .env
+
+# Apex CI: local test results and the JWT private key must never be committed
+test-results/
+*.key
