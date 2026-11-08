@@ -435,6 +435,31 @@
       events: [['change', '{ startDate, endDate }', 'On every valid edit. Not fired while start is after end.']]
     },
     {
+      id: 'copy-button',
+      name: 'c-copy-button',
+      category: 'UX components',
+      kind: 'LWC',
+      path: 'lwc/copyButton',
+      tagline: 'A copy-to-clipboard button that confirms it worked: check-mark icon, toast, and a screen-reader message.',
+      usage:
+        '<c-copy-button value={recordId} alternative-text="Copy record Id"></c-copy-button>\n\n<c-copy-button\n    value={selectedIds}\n    label="Copy Ids"\n    success-message="Ids copied"\n    oncopied={handleCopied}\n></c-copy-button>',
+      api: [
+        ['value', 'String | Number | Array', '—', 'What to copy. An array copies one item per line. The button is disabled while there is nothing to copy.'],
+        ['label', 'String', "''", 'Leave blank for an icon-only button.'],
+        ['alternativeText', 'String', "'Copy to clipboard'", 'Accessible name and tooltip.'],
+        ['iconName', 'String', "'utility:copy_to_clipboard'", 'It becomes a check mark for two seconds after a successful copy.'],
+        ['variant', 'String', "'border' (icon) / 'neutral' (label)", 'Any lightning-button-icon or lightning-button variant.'],
+        ['successMessage / errorMessage', 'String', "'Copied to clipboard' / 'Could not copy to the clipboard'", 'Toast text (and the screen-reader message when the toast is hidden).'],
+        ['preserveWhitespace', 'Boolean', 'false', 'Keep leading and trailing whitespace instead of trimming it.'],
+        ['hideToast', 'Boolean', 'false', 'No toast; the result is announced to screen readers instead.'],
+        ['disabled', 'Boolean', 'false', '']
+      ],
+      events: [
+        ['copied', '{ text }', 'The text is on the clipboard.'],
+        ['copyerror', '{ text }', 'Both copy routes failed.']
+      ]
+    },
+    {
       id: 'function-utils',
       name: 'functionUtils',
       category: 'Data utilities',
@@ -495,6 +520,22 @@
         ['validateMapping(mapping, fields)', 'Messages for what blocks an import: nothing mapped, two columns mapped to one field, or a required field with no column (not checked when an Id column is mapped).'],
         ['coerceValue(raw, type)', 'Returns { skip }, { value } or { error }. Empty cells are skipped, never sent as blanks.'],
         ['buildRecords({ rows, mapping, fields })', '{ records, errors, invalidRowCount, emptyRowCount }; row numbers count the header as row 1. Required fields are only enforced on rows without an Id.']
+      ]
+    },
+    {
+      id: 'clipboard-utils',
+      name: 'clipboardUtils',
+      category: 'Data utilities',
+      kind: 'JS module',
+      path: 'lwc/clipboardUtils',
+      tagline: 'Copy text to the clipboard: Clipboard API first, textarea fallback second, focus restored, nothing left in the page.',
+      usage:
+        "import { copyValue } from 'c/clipboardUtils';\n\nasync handleCopyId() {\n    // Copy first, from the click handler, before any other await.\n    const copied = await copyValue(this.recordId);\n    if (!copied) { /* tell the user */ }\n}\n\nawait copyValue(['001A', '001B']); // one per line",
+      functions: [
+        ['copyValue(value, { trim = true, separator = "\\n", container }?)', 'The Copy Id / Case Number call: trims, joins an array one item per line, refuses blank values. Resolves true or false.'],
+        ['copyText(text, { container }?)', 'navigator.clipboard.writeText first, then copyTextFallback. Resolves false if both fail or the text is empty - an empty copy would wipe what the user had on the clipboard.'],
+        ['copyTextFallback(text, { container }?)', 'Synchronous copy through a hidden textarea. Restores focus (looking through shadow roots), always removes the textarea, and returns false instead of throwing.'],
+        ['toClipboardText(value, { trim, separator }?)', 'The text that would be copied; an empty string means nothing to copy.']
       ]
     },
     {

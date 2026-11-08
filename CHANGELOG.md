@@ -3,6 +3,14 @@
 Notable changes, newest first. Dates are UTC. The website's banner and release timer read
 [`docs/releases.js`](docs/releases.js), not this file; update both when you cut a release (see [RELEASING.md](RELEASING.md)).
 
+## [Unreleased]
+
+### Added
+
+- **Clipboard helpers.** `clipboardUtils` copies text with the Clipboard API and falls back to a hidden textarea where the API is missing or refuses. The fallback restores focus (through shadow roots), always removes the textarea, never throws, can place the textarea in a caller's container (for a focus-trapped modal), and refuses empty text instead of wiping the user's clipboard. `copyValue` trims and copies an array one item per line.
+- **`c-copy-button`.** A copy button that confirms itself: a check-mark icon, a toast (de-duplicated), a screen-reader message, and `copied` / `copyerror` events. It is disabled while there is nothing to copy.
+- A **Copy Ids** bulk action in the datatable demo.
+
 ## [2.0.0] - 2026-10-17
 
 ### Added

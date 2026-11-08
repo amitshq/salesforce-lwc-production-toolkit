@@ -82,7 +82,8 @@
         { title: 'Date-grouped aggregates', summary: 'Group KPIs by day, month or quarter.' },
         { title: 'Record-type-aware picklists', summary: 'c-dynamic-form picks up picklist values for the record type.' },
         { title: 'Keyset paging in the datatable', summary: 'Use the cursor query behind infinite scroll for very large tables.' },
-        { title: 'Import by external Id', summary: 'Upsert from the CSV wizard instead of insert-or-update by Salesforce Id.' }
+        { title: 'Import by external Id', summary: 'Upsert from the CSV wizard instead of insert-or-update by Salesforce Id.' },
+        { title: 'Copy to clipboard', summary: 'clipboardUtils and a c-copy-button that confirms the copy (already on dev).' }
       ]
     }
   };

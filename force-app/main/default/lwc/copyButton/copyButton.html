@@ -1,0 +1,26 @@
+<template>
+    <span class="copy-wrapper">
+        <template if:true={hasLabel}>
+            <lightning-button
+                label={label}
+                icon-name={currentIcon}
+                variant={buttonVariant}
+                title={alternativeText}
+                disabled={isDisabled}
+                onclick={handleClick}
+            ></lightning-button>
+        </template>
+        <template if:false={hasLabel}>
+            <lightning-button-icon
+                icon-name={currentIcon}
+                variant={buttonVariant}
+                alternative-text={alternativeText}
+                title={alternativeText}
+                disabled={isDisabled}
+                onclick={handleClick}
+            ></lightning-button-icon>
+        </template>
+        <span class="slds-assistive-text" role="status" aria-live="polite">{statusText}</span>
+        <div class="clipboard-sink" lwc:dom="manual"></div>
+    </span>
+</template>

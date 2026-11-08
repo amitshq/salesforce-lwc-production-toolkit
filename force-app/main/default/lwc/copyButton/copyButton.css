@@ -1,0 +1,13 @@
+.copy-wrapper {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+}
+
+/* The fallback copy puts its temporary textarea here; it takes no space. */
+.clipboard-sink {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}

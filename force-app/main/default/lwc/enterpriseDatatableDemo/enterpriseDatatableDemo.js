@@ -2,6 +2,8 @@ import { LightningElement } from 'lwc';
 import { exportRowsToCsv as downloadRowsAsCsv } from 'c/csvUtils';
 import { getMetadataRecordByDeveloperName } from 'c/metadataUtils';
 import { hasCustomPermission } from 'c/permissionUtils';
+import { copyValue } from 'c/clipboardUtils';
+import { showSuccessToast, showErrorToast } from 'c/toastService';
 
 const FALLBACK_PAGE_SIZE = 25;
 
@@ -25,6 +27,8 @@ const FALLBACK_PAGE_SIZE = 25;
  *  - auto-refresh, so the table follows changes made elsewhere. It needs
  *    Change Data Capture enabled for Account (Setup > Integrations > Change
  *    Data Capture); without it the table just doesn't update live.
+ *  - clipboardUtils behind a "Copy Ids" bulk action: the selected records' Ids
+ *    go to the clipboard one per line, ready to paste into a report filter
  */
 export default class EnterpriseDatatableDemo extends LightningElement {
     pageSize = FALLBACK_PAGE_SIZE;
@@ -42,7 +46,10 @@ export default class EnterpriseDatatableDemo extends LightningElement {
 
     technologyFilters = [{ fieldName: 'Industry', operatorName: '=', value: 'Technology' }];
 
-    bulkActions = [{ name: 'export', label: 'Export CSV', iconName: 'utility:download' }];
+    bulkActions = [
+        { name: 'export', label: 'Export CSV', iconName: 'utility:download' },
+        { name: 'copyIds', label: 'Copy Ids', iconName: 'utility:copy_to_clipboard' }
+    ];
 
     importFields = [
         { apiName: 'Name', label: 'Account Name', type: 'text', required: true },
@@ -91,10 +98,22 @@ export default class EnterpriseDatatableDemo extends LightningElement {
         const { name, selectedRows } = event.detail;
         if (name === 'export') {
             this.exportRowsToCsv(selectedRows);
+        } else if (name === 'copyIds') {
+            this.copyIds(selectedRows);
         }
     }
 
     exportRowsToCsv(rows) {
         downloadRowsAsCsv(rows, this.columns, 'accounts-export.csv');
+    }
+
+    // Called straight from the click, so the browser still treats the copy as user-initiated.
+    async copyIds(rows) {
+        const copied = await copyValue(rows.map((row) => row.Id));
+        if (copied) {
+            showSuccessToast(this, `${rows.length} Id${rows.length === 1 ? '' : 's'} copied to the clipboard`);
+        } else {
+            showErrorToast(this, 'Could not copy to the clipboard');
+        }
     }
 }

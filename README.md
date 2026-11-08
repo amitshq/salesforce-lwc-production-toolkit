@@ -54,7 +54,7 @@ npm run lint         # ESLint
 npm run prettier     # format everything
 ```
 
-374 Jest tests, 29 website checks and 67 Apex test methods cover the components and services below. The Apex tests run in an org (`sf apex run test -o lwc-toolkit -c -r human`); the Apex added for v2 has not yet been run in one.
+435 Jest tests, 29 website checks and 67 Apex test methods cover the components and services below. The Apex tests run in an org (`sf apex run test -o lwc-toolkit -c -r human`); the Apex added for v2 has not yet been run in one.
 
 ## Architecture
 
@@ -74,8 +74,8 @@ force-app/main/default/
     │   aggregateKpiCard, datatableViewBar, columnChooser    other data components
     ├── modal, confirmDialog, wizard, stateManager, emptyState, errorState,
     │   bulkActionBar, infiniteScrollLoader, permissionGate, featureGate,
-    │   kpiCard, dateRangePicker                        UX components
-    └── functionUtils, objectUtils, jsonUtils, csvUtils, csvImportEngine, urlUtils,
+    │   kpiCard, dateRangePicker, copyButton               UX components
+    └── functionUtils, objectUtils, jsonUtils, csvUtils, csvImportEngine, clipboardUtils, urlUtils,
         apexErrorUtils, ldsErrorUtils, navigationUtils, recordUtils, permissionUtils,
         metadataUtils, toastService, lmsUtils, empUtils    data/Salesforce utility modules
 ```
@@ -181,6 +181,7 @@ What it does with that config:
 | Metadata-driven configuration provider | [`featureGate`](force-app/main/default/lwc/featureGate) - feature-flag gating driven by any Custom Metadata Type |
 | KPI dashboard card | [`kpiCard`](force-app/main/default/lwc/kpiCard) |
 | Date range picker | [`dateRangePicker`](force-app/main/default/lwc/dateRangePicker) - with quick-range presets |
+| Copy button | [`copyButton`](force-app/main/default/lwc/copyButton) - copies a value and confirms it: check-mark icon, toast, screen-reader message |
 
 ### Data utilities
 
@@ -193,6 +194,7 @@ What it does with that config:
 | JSON formatting | [`jsonUtils`](force-app/main/default/lwc/jsonUtils) |
 | URL/query parameter helpers | [`urlUtils`](force-app/main/default/lwc/urlUtils) |
 | CSV export and parsing | [`csvUtils`](force-app/main/default/lwc/csvUtils) - RFC 4180 escaping, parsing and browser download (the demo's Export CSV action and the import wizard) |
+| Clipboard copy | [`clipboardUtils`](force-app/main/default/lwc/clipboardUtils) - Clipboard API with a textarea fallback that restores focus and cleans up after itself; copies a list one item per line (the demo's Copy Ids action) |
 
 ### Salesforce utilities
 

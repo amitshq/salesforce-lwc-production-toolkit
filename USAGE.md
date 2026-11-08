@@ -36,12 +36,14 @@ For the "why," see [README.md](README.md). This document only covers "how."
   - [Feature Gate](#feature-gate)
   - [KPI Card](#kpi-card)
   - [Date Range Picker](#date-range-picker)
+  - [Copy Button](#copy-button)
 - [Data utility modules](#data-utility-modules)
   - [functionUtils](#functionutils)
   - [objectUtils](#objectutils)
   - [jsonUtils](#jsonutils)
   - [csvUtils](#csvutils)
   - [csvImportEngine](#csvimportengine)
+  - [clipboardUtils](#clipboardutils)
   - [urlUtils](#urlutils)
 - [Salesforce utility modules](#salesforce-utility-modules)
   - [apexErrorUtils](#apexerrorutils)
@@ -826,6 +828,37 @@ handleRangeChange(event) {
 
 **Events**: `change` (`{ startDate, endDate }`) &mdash; fired on every valid edit (including a preset click). Not fired while `startDate > endDate`; an inline error message shows instead.
 
+### Copy Button
+
+`c-copy-button` &mdash; a button that copies a value to the clipboard and tells the user it worked: the icon turns into a check mark for two seconds, a toast confirms it (or says why it failed), and screen readers are told. For a record Id, a case number, a share link, or a list of Ids.
+
+```html
+<c-copy-button value={recordId} alternative-text="Copy record Id"></c-copy-button>
+
+<c-copy-button
+    value={selectedIds}
+    label="Copy Ids"
+    success-message="Ids copied"
+    oncopied={handleCopied}
+></c-copy-button>
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `value` | String / Number / Array | — | What to copy. An array copies one item per line. The button is disabled while there is nothing to copy (empty, whitespace only, an empty array). |
+| `label` | String | `''` | Leave blank for an icon-only button. |
+| `alternativeText` | String | `'Copy to clipboard'` | The accessible name and tooltip. |
+| `iconName` | String | `'utility:copy_to_clipboard'` | Becomes a check mark for two seconds after a successful copy. |
+| `variant` | String | `'border'` (icon only), `'neutral'` (with a label) | Any `lightning-button-icon` or `lightning-button` variant. |
+| `successMessage` / `errorMessage` | String | `'Copied to clipboard'` / `'Could not copy to the clipboard'` | The toast text, and the screen-reader message when the toast is hidden. |
+| `preserveWhitespace` | Boolean | `false` | Keep leading and trailing whitespace instead of trimming it. |
+| `hideToast` | Boolean | `false` | No toast. The result is announced to screen readers instead. |
+| `disabled` | Boolean | `false` | |
+
+**Events**: `copied` (`{ text }`) &mdash; the text is on the clipboard. `copyerror` (`{ text }`) &mdash; both copy routes failed. `text` is what was copied, after trimming and joining.
+
+It copies on the click itself, because browsers only allow a copy while the click's user activation is live, and its fallback keeps the temporary textarea inside its own markup instead of on `document.body`, which suits a focus-trapped `c-modal`. A second click restarts the check mark, and `toastService` ignores an identical toast shown within the last three seconds, so repeated clicks do not stack toasts.
+
 ---
 
 ## Data utility modules
@@ -898,6 +931,50 @@ The UI-free logic behind `c-csv-import-wizard`, for importing without its screen
 | `buildRecords` | `({ rows, mapping, fields }) => { records, errors, invalidRowCount, emptyRowCount }` | `records` is `[{ rowNumber, fields }]`, ready for `saveRecords`; `errors` is `[{ rowNumber, fieldLabel, message }]`. Row numbers count the header as row 1. A row with any error is left out of `records` entirely. Fully blank rows are counted in `emptyRowCount`. Required fields are only enforced on rows without an `Id`. |
 
 `ID_FIELD` (`'Id'`) is exported for the mapping value that means "update this record".
+
+### clipboardUtils
+
+Copy text to the clipboard from your own code. It uses the asynchronous Clipboard API where the browser allows it, and falls back to a temporary `<textarea>` with `document.execCommand('copy')` where it does not: an insecure origin, an iframe whose policy blocks the API, an older browser, or a write the browser rejects. For a ready-made button, use [`c-copy-button`](#copy-button).
+
+```js
+import { copyValue } from 'c/clipboardUtils';
+import { showSuccessToast, showErrorToast } from 'c/toastService';
+
+async handleCopyId() {
+    // Copy first, straight from the click handler, before any other await.
+    const copied = await copyValue(this.recordId);
+    if (copied) {
+        showSuccessToast(this, 'Id copied');
+    } else {
+        showErrorToast(this, 'Could not copy to the clipboard');
+    }
+}
+
+copySelected(rows) {
+    return copyValue(rows.map((row) => row.Id)); // one Id per line
+}
+```
+
+| Function | Signature | Description |
+|---|---|---|
+| `copyValue` | `async (value, { trim = true, separator = '\n', container }?) => Boolean` | The Copy Id / Case Number call. Turns the value into text with `toClipboardText`, then copies it. Resolves `false`, leaving the clipboard alone, when there is nothing to copy. |
+| `copyText` | `async (text, { container }?) => Boolean` | `navigator.clipboard.writeText` first, then `copyTextFallback` if the API is missing or rejects. Resolves `false` if both fail, or if the text is empty. |
+| `copyTextFallback` | `(text, { container }?) => Boolean` | Synchronous copy through a hidden textarea. Never throws: it returns `false` when the browser blocks the copy. |
+| `toClipboardText` | `(value, { trim = true, separator = '\n' }?) => String` | The text that would be copied. `null`/`undefined` become `''`; an array becomes one item per line with blank items dropped; anything else goes through `String()`. An empty result means there is nothing to copy. |
+
+What the fallback takes care of, so you do not have to:
+
+- **Focus.** Whatever had focus before gets it back, including an element inside a shadow root, so a keyboard user is not dropped at the top of the page after pressing Copy.
+- **Cleanup.** The textarea is removed on every path, including when selecting or copying throws.
+- **Empty text.** `copyText('')` does not copy: writing an empty string would silently wipe what the user had on the clipboard while reporting success.
+- **Where it sits.** Pass `container` (any element in your own DOM, such as a `lwc:dom="manual"` div) to put the textarea there instead of on `document.body`, for example inside a modal's focus trap. `c-copy-button` does this.
+- **iOS.** The textarea uses a 16px font so Safari does not zoom in when it takes focus.
+
+Why "copy first": browsers only allow a copy while the click's user activation is live, and Safari drops it after an `await`. `copyText` and `copyValue` start copying synchronously, and when the Clipboard API is absent the fallback also runs before the function returns, so call them from the click handler before any other asynchronous work. A rejected Clipboard API write falls back after an `await`, which a strict browser may refuse; the result is then `false`.
+
+It cannot read the clipboard, and `execCommand` is deprecated (it is only the fallback). Jest cannot exercise a real browser clipboard, so smoke-test a copy on the pages and browsers you target.
+
+`c-enterprise-datatable-demo` uses it for its **Copy Ids** bulk action.
 
 ### jsonUtils
 
@@ -1262,7 +1339,7 @@ Backs `c-file-upload-manager`. Reads/deletes `ContentDocument`/`ContentDocumentL
 
 ```bash
 npm install
-npm test             # Jest — 374 tests across every LWC/util module
+npm test             # Jest — 435 tests across every LWC/util module
 npm run test:site     # the website's release timer, catalog and permission-set coverage (29 checks, node --test)
 npm run lint          # ESLint
 ```
