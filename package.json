@@ -2,6 +2,7 @@
   "name": "salesforce-lwc-production-toolkit",
   "private": true,
   "version": "2.0.0",
+  "license": "MIT",
   "description": "Reusable, production-grade Lightning Web Components and Apex services for enterprise Salesforce projects.",
   "scripts": {
     "test": "sfdx-lwc-jest --skipApiVersionCheck",

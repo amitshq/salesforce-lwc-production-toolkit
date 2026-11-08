@@ -113,3 +113,24 @@ test('the README "What\'s inside" list is up to date (run: npm run docs:readme)'
   const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8').replace(/\r\n/g, '\n');
   assert.equal(readmeIndex.apply(readme), readme, 'README.md is out of date: run "npm run docs:readme" and commit it');
 });
+
+test('every LWC bundle has its configuration file, which Salesforce requires to deploy it', () => {
+  const missing = fs
+    .readdirSync(path.join(SOURCE, 'lwc'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => !fs.existsSync(path.join(SOURCE, 'lwc', name, `${name}.js-meta.xml`)));
+  assert.deepEqual(missing, [], `add a <name>.js-meta.xml to: ${missing.join(', ')}`);
+});
+
+test('every LWC configuration file declares an apiVersion', () => {
+  const missing = fs
+    .readdirSync(path.join(SOURCE, 'lwc'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => {
+      const file = path.join(SOURCE, 'lwc', name, `${name}.js-meta.xml`);
+      return fs.existsSync(file) && !/<apiVersion>\d+\.\d<\/apiVersion>/.test(fs.readFileSync(file, 'utf8'));
+    });
+  assert.deepEqual(missing, [], `these configuration files have no apiVersion: ${missing.join(', ')}`);
+});
