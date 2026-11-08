@@ -1,0 +1,21 @@
+<template>
+    <c-modal header-label="Test dialog" hide-close-button={hideCloseButton}>
+        <template if:true={withBodyInput}>
+            <input class="body-input" />
+        </template>
+        <p>Body text.</p>
+        <div slot="footer">
+            <template if:true={withFooterButtons}>
+                <button class="cancel">Cancel</button>
+                <button class="save">Save</button>
+            </template>
+            <template if:true={withDisabledLastButton}>
+                <button class="save">Save</button>
+                <button class="disabled" disabled>Not now</button>
+            </template>
+            <template if:true={withBaseComponentButton}>
+                <lightning-button class="base-button" label="Base"></lightning-button>
+            </template>
+        </div>
+    </c-modal>
+</template>

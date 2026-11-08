@@ -1,7 +1,34 @@
 import { LightningElement, api } from 'lwc';
 
-const FOCUSABLE_SELECTOR =
-    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+// Native controls plus the base components that take focus. `disabled` is checked as a property
+// below, because on base components it is not a reflected attribute.
+const FOCUSABLE_SELECTOR = [
+    'a[href]',
+    'button',
+    'textarea',
+    'input',
+    'select',
+    '[tabindex]:not([tabindex="-1"])',
+    'lightning-button',
+    'lightning-button-icon',
+    'lightning-button-menu',
+    'lightning-input',
+    'lightning-combobox',
+    'lightning-textarea',
+    'lightning-checkbox-group',
+    'lightning-radio-group',
+    'lightning-dual-listbox',
+    'lightning-record-picker'
+].join(', ');
+
+/** The element that really has focus, looking through shadow roots (document.activeElement stops at the host). */
+function getDeepActiveElement() {
+    let active = document.activeElement;
+    while (active && active.shadowRoot && active.shadowRoot.activeElement) {
+        active = active.shadowRoot.activeElement;
+    }
+    return active;
+}
 
 /**
  * A declarative, composable modal for the common case LightningModal
@@ -61,7 +88,7 @@ export default class Modal extends LightningElement {
         if (this.isOpen) {
             return;
         }
-        this.lastFocusedElement = document.activeElement;
+        this.lastFocusedElement = getDeepActiveElement();
         this.isOpen = true;
         document.addEventListener('keydown', this.boundHandleKeydown);
         // Wait for the modal markup to render before moving focus into it.
@@ -93,46 +120,53 @@ export default class Modal extends LightningElement {
     }
 
     handleKeydown(event) {
-        if (!this.isOpen) {
-            return;
-        }
-        if (event.key === 'Escape') {
+        if (this.isOpen && event.key === 'Escape') {
             this.close();
-            return;
-        }
-        if (event.key === 'Tab') {
-            this.trapFocus(event);
         }
     }
 
-    trapFocus(event) {
+    /*
+     * Focus is kept inside by two invisible guards around the dialog, not by intercepting Tab.
+     * Tab moves through everything in its natural order - the close button, the slotted body and
+     * footer, even controls inside nested components - and only when it runs off an edge does it
+     * land on a guard, which sends it round to the other end. The old Tab handler only looked in
+     * this component's own markup, never saw the slotted content, and trapped keyboard users on
+     * the close button.
+     */
+    handleStartGuardFocus() {
         const focusable = this.getFocusableElements();
-        if (!focusable.length) {
-            return;
-        }
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        const activeElement = this.template.activeElement;
+        this.focusOrDialog(focusable[focusable.length - 1]);
+    }
 
-        if (event.shiftKey && activeElement === first) {
-            event.preventDefault();
-            last.focus();
-        } else if (!event.shiftKey && activeElement === last) {
-            event.preventDefault();
-            first.focus();
-        }
+    handleEndGuardFocus() {
+        this.focusOrDialog(this.getFocusableElements()[0]);
     }
 
     focusFirstElement() {
-        const [first] = this.getFocusableElements();
-        if (first) {
-            first.focus();
+        this.focusOrDialog(this.getFocusableElements()[0]);
+    }
+
+    // With nothing focusable inside, the dialog itself takes focus, so keyboard users are still in it.
+    focusOrDialog(element) {
+        const target = element || this.template.querySelector('section[role="dialog"]');
+        if (target) {
+            target.focus();
         }
     }
 
+    /** In tab order: this component's own controls (the close button), then the slotted body, then the footer. */
     getFocusableElements() {
         const container = this.template.querySelector('.slds-modal__container');
-        return container ? Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)) : [];
+        if (!container) {
+            return [];
+        }
+        const own = Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR));
+        // Slotted content belongs to this component's light DOM, which the shadow-tree query above never sees.
+        const slotted = Array.from(this.querySelectorAll(FOCUSABLE_SELECTOR));
+        const inFooter = (element) => !!element.closest('[slot="footer"]');
+        return [...own, ...slotted.filter((element) => !inFooter(element)), ...slotted.filter(inFooter)].filter(
+            (element) => !element.disabled && !element.closest('[hidden]')
+        );
     }
 
     disconnectedCallback() {

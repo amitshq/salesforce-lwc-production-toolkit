@@ -5,3 +5,13 @@
     max-height: 100vh;
     margin: 0;
 }
+
+/* The focus guards take no space and show nothing; they only catch focus at the dialog's edges. */
+.focus-guard {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    outline: none;
+}
